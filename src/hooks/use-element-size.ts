@@ -1,5 +1,4 @@
-
-import { useState, useLayoutEffect, useRef } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 
 interface Size {
     width: number;
@@ -15,14 +14,13 @@ export function useElementSize<T extends HTMLElement = HTMLDivElement>(): [
         height: 0,
     });
 
-    const ref = useRef<T | null>(null);
-
-    const setRef = (node: T | null) => {
-        ref.current = node;
-    };
+    const [node, setNode] = useState<T | null>(null);
+    const setRef = useCallback((nextNode: T | null) => {
+        setNode(nextNode);
+    }, []);
 
     useLayoutEffect(() => {
-        if (!ref.current) return;
+        if (!node) return;
 
         const handleResize = (entries: ResizeObserverEntry[]) => {
             if (!Array.isArray(entries) || !entries.length) {
@@ -45,12 +43,12 @@ export function useElementSize<T extends HTMLElement = HTMLDivElement>(): [
         };
 
         const observer = new ResizeObserver(handleResize);
-        observer.observe(ref.current);
+        observer.observe(node);
 
         return () => {
             observer.disconnect();
         };
-    }, [ref.current]);
+    }, [node]);
 
     return [setRef, size];
 }

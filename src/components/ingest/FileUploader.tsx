@@ -56,6 +56,38 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
     const [files, setFiles] = useState<FileWithStatus[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const addFiles = useCallback((newFiles: File[]) => {
+        setFiles((prev) => {
+            const seen = new Set(prev.map((f) => `${f.file.name}:${f.file.size}`));
+            const validFiles: FileWithStatus[] = [];
+
+            for (const file of newFiles) {
+                if (file.size > 50 * 1024 * 1024) {
+                    alert(`File ${file.name} is too large (max 50MB)`);
+                    continue;
+                }
+                if (!isAllowedFile(file)) {
+                    alert(`File ${file.name} is not a supported type (PDF/TXT)`);
+                    continue;
+                }
+
+                const fingerprint = `${file.name}:${file.size}`;
+                if (seen.has(fingerprint)) {
+                    continue;
+                }
+
+                seen.add(fingerprint);
+                validFiles.push({
+                    id: Math.random().toString(36).substring(7),
+                    file,
+                    status: 'pending',
+                });
+            }
+
+            return [...prev, ...validFiles];
+        });
+    }, []);
+
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
         setIsDragging(true);
@@ -72,40 +104,14 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
         if (e.dataTransfer.files?.length > 0) {
             addFiles(Array.from(e.dataTransfer.files));
         }
-    }, [files]);
+    }, [addFiles]);
 
     const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files?.length) {
             addFiles(Array.from(e.target.files));
         }
         if (fileInputRef.current) fileInputRef.current.value = '';
-    }, [files]);
-
-    const addFiles = (newFiles: File[]) => {
-        const validFiles: FileWithStatus[] = [];
-
-        newFiles.forEach((file) => {
-            if (file.size > 50 * 1024 * 1024) {
-                alert(`File ${file.name} is too large (max 50MB)`);
-                return;
-            }
-            if (!isAllowedFile(file)) {
-                alert(`File ${file.name} is not a supported type (PDF/TXT)`);
-                return;
-            }
-            if (files.some((f) => f.file.name === file.name && f.file.size === file.size)) {
-                return;
-            }
-
-            validFiles.push({
-                id: Math.random().toString(36).substring(7),
-                file,
-                status: 'pending',
-            });
-        });
-
-        setFiles((prev) => [...prev, ...validFiles]);
-    };
+    }, [addFiles]);
 
     const removeFile = (id: string) => {
         setFiles((prev) => prev.filter((f) => f.id !== id));

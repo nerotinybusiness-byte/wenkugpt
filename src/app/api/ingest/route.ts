@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { processPipeline } from '@/lib/ingest/pipeline';
 import { requireAdmin } from '@/lib/auth/request-auth';
 import { apiError, apiSuccess } from '@/lib/api/response';
+import { getRequestId, logError } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 
@@ -149,7 +150,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             },
         });
     } catch (error) {
-        console.error('Ingest API error:', error);
+        const requestId = getRequestId(request);
+        logError('Ingest POST error', { route: '/api/ingest', requestId }, error);
         return apiError('INGEST_FAILED', mapIngestErrorMessage(error), 500);
     }
 }

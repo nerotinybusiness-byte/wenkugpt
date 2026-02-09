@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { NextRequest } from 'next/server';
 
 describe('GET /api/health', () => {
     beforeEach(() => {
@@ -11,7 +12,7 @@ describe('GET /api/health', () => {
         vi.doMock('@/lib/db', () => ({ db: { execute } }));
 
         const { GET } = await import('@/app/api/health/route');
-        const response = await GET();
+        const response = await GET(new NextRequest('http://localhost/api/health'));
 
         expect(response.status).toBe(200);
         const payload = await response.json();
@@ -26,7 +27,7 @@ describe('GET /api/health', () => {
         vi.doMock('@/lib/db', () => ({ db: { execute } }));
 
         const { GET } = await import('@/app/api/health/route');
-        const response = await GET();
+        const response = await GET(new NextRequest('http://localhost/api/health'));
 
         expect(response.status).toBe(503);
         const payload = await response.json();

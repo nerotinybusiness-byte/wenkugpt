@@ -5,12 +5,17 @@ import { sql } from 'drizzle-orm';
 
 export { };
 
+type PgExtensionRow = {
+    extversion?: string;
+};
+
 async function main() {
     const { db } = await import('./src/lib/db');
     try {
         const result = await db.execute(sql`SELECT extversion FROM pg_extension WHERE extname = 'vector'`);
-        // @ts-ignore
-        console.log("pgvector version:", result[0]?.extversion);
+        const rows = Array.isArray(result) ? result : result.rows;
+        const firstRow = rows[0] as PgExtensionRow | undefined;
+        console.log("pgvector version:", firstRow?.extversion ?? 'not installed');
     } catch (e) {
         console.error("Failed to check pgvector version:", e);
     }

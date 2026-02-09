@@ -4,6 +4,7 @@ import { chunks } from '@/lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth/request-auth';
 import { apiError, apiSuccess } from '@/lib/api/response';
+import { getRequestId, logError } from '@/lib/logger';
 
 export async function GET(
     request: NextRequest,
@@ -43,7 +44,8 @@ export async function GET(
         });
 
     } catch (error) {
-        console.error('Error fetching document preview:', error);
+        const requestId = getRequestId(request);
+        logError('Document preview GET error', { route: '/api/documents/[id]/preview', requestId }, error);
         return apiError('DOCUMENT_PREVIEW_FAILED', 'Failed to fetch document preview', 500);
     }
 }

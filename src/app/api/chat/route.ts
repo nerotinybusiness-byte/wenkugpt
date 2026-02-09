@@ -9,9 +9,19 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { executeRAG, type RAGConfig } from '@/lib/ai/agents';
 import { requireUser } from '@/lib/auth/request-auth';
-import { logError } from '@/lib/logger';
+import { getRequestId, logError } from '@/lib/logger';
 import type { MessageSource } from '@/lib/db/schema';
 import { apiError, apiSuccess } from '@/lib/api/response';
+
+const DEFAULT_GENERATOR_MODEL = 'gemini-2.5-flash';
+const SUPPORTED_GENERATOR_MODELS = new Set([
+    'gemini-2.5-flash',
+]);
+
+function resolveGeneratorModel(model?: string): string {
+    if (!model) return DEFAULT_GENERATOR_MODEL;
+    return SUPPORTED_GENERATOR_MODELS.has(model) ? model : DEFAULT_GENERATOR_MODEL;
+}
 
 const ChatRequestSchema = z.object({
     query: z.string().min(1).max(2000),
@@ -82,10 +92,11 @@ export async function POST(request: NextRequest) {
                 minScore: settings?.minScore ?? 0.3,
                 vectorWeight: settings?.vectorWeight ?? 0.7,
                 textWeight: settings?.textWeight ?? 0.3,
+                userId,
             },
             topK: settings?.topK ?? 5,
             confidenceThreshold: settings?.confidenceThreshold ?? 0.85,
-            generatorModel: settings?.generatorModel ?? 'gemini-2.0-flash',
+            generatorModel: resolveGeneratorModel(settings?.generatorModel),
             auditorModel: settings?.auditorModel ?? 'claude-3-5-haiku-latest',
             temperature: settings?.temperature ?? 0.0,
             skipVerification: settings?.enableAuditor === false,
@@ -125,7 +136,7 @@ export async function POST(request: NextRequest) {
             stats: ragResponse.stats,
         });
     } catch (error) {
-        const requestId = request.headers.get('X-Request-ID') ?? undefined;
+        const requestId = getRequestId(request);
         logError('Chat API error', { route: '/api/chat', requestId }, error);
 
         return apiError('CHAT_INTERNAL_ERROR', 'Internal server error', 500);
@@ -181,7 +192,8 @@ export async function GET(request: NextRequest) {
 
         return apiSuccess({ messages: typedMessages });
     } catch (error) {
-        console.error('Chat GET Error:', error);
+        const requestId = getRequestId(request);
+        logError('Chat GET error', { route: '/api/chat', requestId }, error);
         return apiError('CHAT_FETCH_FAILED', 'Failed to fetch messages', 500);
     }
 }

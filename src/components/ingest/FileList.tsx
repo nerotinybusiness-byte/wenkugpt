@@ -263,7 +263,7 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
             <div className="grid gap-2">
                 {filteredDocuments.length === 0 && searchQuery && (
                     <div className="text-center p-8 text-white/40 border border-dashed border-white/10 rounded-lg">
-                        <p>No documents match "{searchQuery}"</p>
+                        <p>No documents match &quot;{searchQuery}&quot;</p>
                     </div>
                 )}
 

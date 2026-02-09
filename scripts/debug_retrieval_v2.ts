@@ -3,7 +3,7 @@ export { };
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 // Dynamic imports required for dotenv to load before DB connection
-import { cosineDistance, desc, gt, sql, ilike, eq } from 'drizzle-orm';
+import { desc, gt, sql, ilike, eq } from 'drizzle-orm';
 import * as fs from 'fs';
 
 const logFile = 'retrieval_output.txt';

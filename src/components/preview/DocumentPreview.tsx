@@ -6,7 +6,7 @@
  * Displays sources with animated highlight on citation click
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Source {
@@ -36,16 +36,12 @@ interface DocumentPreviewProps {
 }
 
 export default function DocumentPreview({ sources, activeHighlight }: DocumentPreviewProps) {
-    const [isAnimating, setIsAnimating] = useState(false);
     const highlightRef = useRef<HTMLDivElement>(null);
 
     // Scroll to and animate highlight when it changes
     useEffect(() => {
         if (activeHighlight && highlightRef.current) {
             highlightRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            setIsAnimating(true);
-            const timer = setTimeout(() => setIsAnimating(false), 3000);
-            return () => clearTimeout(timer);
         }
     }, [activeHighlight]);
 
@@ -93,7 +89,7 @@ export default function DocumentPreview({ sources, activeHighlight }: DocumentPr
                                 className={`
                   relative p-4 rounded-xl glass-light
                   transition-all duration-300
-                  ${isActive && isAnimating ? 'golden-glow' : ''}
+                  ${isActive ? 'golden-glow' : ''}
                 `}
                             >
                                 {/* Source header */}

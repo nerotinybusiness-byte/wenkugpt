@@ -8,6 +8,15 @@
 
 import { useCallback } from 'react';
 
+export interface CitationPayload {
+    id: string;
+    chunkId: string;
+    pageNumber: number;
+    boundingBox: { x: number; y: number; width: number; height: number } | null;
+    filename?: string;
+    title?: string;
+}
+
 interface CitationLinkProps {
     /** Citation ID (e.g., "1", "2") */
     id: string;
@@ -19,14 +28,10 @@ interface CitationLinkProps {
     boundingBox: { x: number; y: number; width: number; height: number } | null;
     /** Source filename */
     filename?: string;
+    /** Source title (legacy fallback) */
+    title?: string;
     /** Callback when citation is clicked */
-    onCitationClick?: (citation: {
-        id: string;
-        chunkId: string;
-        pageNumber: number;
-        boundingBox: { x: number; y: number; width: number; height: number } | null;
-        filename?: string;
-    }) => void;
+    onCitationClick?: (citation: CitationPayload) => void;
 }
 
 export default function CitationLink({
@@ -35,6 +40,7 @@ export default function CitationLink({
     pageNumber,
     boundingBox,
     filename,
+    title,
     onCitationClick,
 }: CitationLinkProps) {
     const handleClick = useCallback(() => {
@@ -45,8 +51,9 @@ export default function CitationLink({
             pageNumber,
             boundingBox,
             filename,
+            title,
         });
-    }, [id, chunkId, pageNumber, boundingBox, filename, onCitationClick]);
+    }, [id, chunkId, pageNumber, boundingBox, filename, title, onCitationClick]);
 
     return (
         <button

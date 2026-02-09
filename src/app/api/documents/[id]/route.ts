@@ -4,6 +4,7 @@ import { documents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth/request-auth';
 import { apiError, apiSuccess } from '@/lib/api/response';
+import { getRequestId, logError } from '@/lib/logger';
 
 export async function DELETE(
     request: NextRequest,
@@ -34,7 +35,8 @@ export async function DELETE(
         });
 
     } catch (error) {
-        console.error('Error deleting document:', error);
+        const requestId = getRequestId(request);
+        logError('Document DELETE error', { route: '/api/documents/[id]', requestId }, error);
         return apiError('DOCUMENT_DELETE_FAILED', 'Failed to delete document', 500);
     }
 }

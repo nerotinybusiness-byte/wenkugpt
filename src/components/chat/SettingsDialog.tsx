@@ -21,9 +21,9 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Settings, RefreshCw, RotateCcw } from "lucide-react";
+import { Settings, RotateCcw } from "lucide-react";
 import { useSettings, GEMINI_MODELS, CLAUDE_MODELS } from "@/lib/settings/store";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from "next-themes";
 
@@ -49,12 +49,6 @@ export function SettingsDialog() {
     })));
 
     const { theme, setTheme, resolvedTheme } = useTheme();
-    const [mounted, setMounted] = useState(false);
-
-    // Avoid hydration mismatch
-    useEffect(() => {
-        setMounted(true);
-    }, []);
 
     const [isOpen, setIsOpen] = useState(false);
 
@@ -257,7 +251,7 @@ export function SettingsDialog() {
                                 </p>
                             </div>
                             <Switch
-                                checked={mounted && theme === 'light'}
+                                checked={resolvedTheme === 'light' || theme === 'light'}
                                 onCheckedChange={(checked) => setTheme(checked ? 'light' : 'dark')}
                             />
                         </div>

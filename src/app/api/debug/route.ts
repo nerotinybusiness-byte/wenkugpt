@@ -4,6 +4,7 @@ import { documents, chunks } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth/request-auth';
 import { apiError, apiSuccess } from '@/lib/api/response';
+import { getRequestId, logError } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
     if (process.env.NODE_ENV === 'production') {
@@ -33,7 +34,9 @@ export async function GET(request: NextRequest) {
         }));
 
         return apiSuccess({ documents: results });
-    } catch {
+    } catch (error) {
+        const requestId = getRequestId(request);
+        logError('Debug GET error', { route: '/api/debug', requestId }, error);
         return apiError('DEBUG_ENDPOINT_FAILED', 'Debug endpoint failed', 500);
     }
 }

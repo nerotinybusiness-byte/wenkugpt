@@ -9,6 +9,7 @@ import { db } from './index';
 import { chunks, documents } from './schema';
 import { sql } from 'drizzle-orm';
 import { embedText } from '@/lib/ingest/embedder';
+import { devLog } from '@/lib/logger';
 
 /**
  * Search result with relevance scores
@@ -95,15 +96,15 @@ export async function hybridSearch(
 ): Promise<SearchResult[]> {
   const { limit, minScore, vectorWeight, textWeight, userId } = config;
 
-  console.log(`\n🔍 Hybrid Search: "${query.slice(0, 50)}..."`);
+  devLog(`\n🔍 Hybrid Search: "${query.slice(0, 50)}..."`);
 
   // Step 1: Generate query embedding
-  console.log('   📊 Generating query embedding...');
+  devLog('   📊 Generating query embedding...');
   const queryEmbedding = await embedText(query);
   const embeddingStr = `'[${queryEmbedding.join(',')}]'::vector(768)`;
 
   // Step 2: Execute hybrid search query
-  console.log('   🔎 Executing hybrid search...');
+  devLog('   🔎 Executing hybrid search...');
 
   // Build the raw SQL for hybrid search
   // drizzle execute() with node-postgres returns a QueryResult object, not an array
@@ -161,7 +162,7 @@ export async function hybridSearch(
   // Handle both array (postgres.js) and QueryResult (node-postgres)
   const rows = Array.isArray(result) ? result : result.rows;
 
-  console.log(`   ✓ Found ${rows.length} results`);
+  devLog(`   ✓ Found ${rows.length} results`);
 
   // Transform to SearchResult objects
   return (rows as unknown as HybridSearchRow[]).map(row => ({

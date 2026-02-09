@@ -1,7 +1,6 @@
 
-import { Send, ArrowUp } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { useRef, useEffect, useState } from 'react';
-import { Textarea } from '@/components/ui/textarea';
 
 interface ChatInputProps {
     onSend: (message: string) => void;

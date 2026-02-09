@@ -4,6 +4,7 @@ import { documents } from '@/lib/db/schema';
 import { desc, lt } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth/request-auth';
 import { apiError, apiSuccess } from '@/lib/api/response';
+import { getRequestId, logError } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +49,8 @@ export async function GET(request: NextRequest) {
             nextCursor: hasNextPage ? items[items.length - 1].createdAt : null,
         });
     } catch (error) {
-        console.error('Error fetching documents:', error);
+        const requestId = getRequestId(request);
+        logError('Documents GET error', { route: '/api/documents', requestId }, error);
         return apiError('DOCUMENTS_FETCH_FAILED', 'Failed to fetch documents', 500);
     }
 }

@@ -34,7 +34,7 @@ Until full OAuth session wiring is finished, API auth expects:
 
 Local development fallback is supported via:
 - `DEV_DEFAULT_USER_EMAIL`
-- `ALLOW_HEADERLESS_AUTH=true` (temporary preview/staging switch only)
+- first email from `ADMIN_EMAILS` (non-production only)
 
 Only emails in `ADMIN_EMAILS` can access:
 - `POST /api/ingest`

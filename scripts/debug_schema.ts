@@ -1,49 +1,51 @@
-
 import { db } from './src/lib/db';
 import { sql } from 'drizzle-orm';
 
+type InformationSchemaRow = {
+    column_name: string;
+    data_type: string;
+    udt_name: string;
+};
+
 async function main() {
-    console.log('🔍 Checking database schema...');
+    console.log('Checking database schema...');
 
     try {
-        // 1. Check if fts_vector column exists in chunks table
-        const columns = await db.execute(sql`
+        const columnsResult = await db.execute(sql`
             SELECT column_name, data_type, udt_name
-            FROM information_schema.columns 
+            FROM information_schema.columns
             WHERE table_name = 'chunks'
         `);
 
-        const rows = Array.isArray(columns) ? columns : columns.rows;
-        console.log('\n📄 Columns in "chunks" table:');
-        rows.forEach((col: any) => {
+        const rows = (Array.isArray(columnsResult) ? columnsResult : columnsResult.rows) as InformationSchemaRow[];
+        console.log('\nColumns in "chunks" table:');
+        rows.forEach((col) => {
             console.log(` - ${col.column_name} (${col.data_type} / ${col.udt_name})`);
         });
 
-        const hasFtsVector = rows.some((col: any) => col.column_name === 'fts_vector');
+        const hasFtsVector = rows.some((col) => col.column_name === 'fts_vector');
         if (!hasFtsVector) {
-            console.error('\n❌ CRITICAL: "fts_vector" column is MISSING!');
+            console.error('\nCRITICAL: "fts_vector" column is MISSING!');
         } else {
-            console.log('\n✅ "fts_vector" column exists.');
+            console.log('\n"fts_vector" column exists.');
         }
 
-        // 2. Test Czech text search configuration
-        console.log('\n🇨🇿 Testing Czech text search support...');
+        console.log('\nTesting Czech text search support...');
         try {
-            const ftsTest = await db.execute(sql`SELECT to_tsvector('czech', 'Příliš žluťoučký kůň') as vector`);
-            console.log('✅ Czech configuration available.');
+            await db.execute(sql`SELECT to_tsvector('czech', 'Prilis zlutoucky kun') as vector`);
+            console.log('Czech configuration available.');
         } catch (err) {
-            console.error('❌ Czech configuration NOT available:', err);
-            console.log('   Trying "simple" as fallback...');
+            console.error('Czech configuration NOT available:', err);
+            console.log('Trying "simple" as fallback...');
             try {
                 await db.execute(sql`SELECT to_tsvector('simple', 'test')`);
-                console.log('   "simple" works.');
+                console.log('"simple" works.');
             } catch (e) {
-                console.error('   Even "simple" failed:', e);
+                console.error('Even "simple" failed:', e);
             }
         }
-
     } catch (error) {
-        console.error('❌ Error inspecting DB:', error);
+        console.error('Error inspecting DB:', error);
     }
 
     process.exit(0);

@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { users, type UserRole } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { apiError } from '@/lib/api/response';
+import { getRequestId, logError } from '@/lib/logger';
 
 export interface RequestUser {
     id: string;
@@ -94,7 +95,8 @@ export async function requireUser(request: NextRequest): Promise<AuthResult> {
         const user = await resolveUserByEmail(email);
         return { ok: true, user };
     } catch (error) {
-        console.error('Auth resolution failed:', error);
+        const requestId = getRequestId(request);
+        logError('Auth resolution failed', { route: 'auth', requestId }, error);
         return {
             ok: false,
             response: apiError(

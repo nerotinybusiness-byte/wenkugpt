@@ -15,6 +15,7 @@ import { FileText, MessageSquarePlus, History, Trash2 } from 'lucide-react';
 
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
+import type { CitationPayload } from './CitationLink';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import { SettingsDialog } from './SettingsDialog';
 import dynamic from 'next/dynamic';
@@ -48,7 +49,7 @@ interface Message {
 }
 
 interface ChatPanelProps {
-    onCitationClick?: (citation: Source) => void;
+    onCitationClick?: (citation: CitationPayload) => void;
     onSourcesChange?: (sources: Source[]) => void;
 }
 
@@ -112,7 +113,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
     const [initialPage, setInitialPage] = useState<number>(1);
     const [highlights, setHighlights] = useState<Array<{ page: number; bbox: NonNullable<Source['boundingBox']> }>>([]);
 
-    const onCitationSelect = (source: Source) => {
+    const onCitationSelect = (source: CitationPayload) => {
         console.log('ChatPanel: Citation clicked', source);
         onCitationClick?.(source);
 
@@ -580,6 +581,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
 
             {/* PDF Viewer Modal */}
             <PDFViewer
+                key={`${pdfUrl ?? 'none'}:${initialPage}:${isPdfOpen ? 'open' : 'closed'}`}
                 url={pdfUrl}
                 isOpen={isPdfOpen}
                 onClose={() => setIsPdfOpen(false)}

@@ -7,6 +7,12 @@ export interface LogContext {
   [key: string]: unknown;
 }
 
+interface RequestLike {
+  headers: {
+    get(name: string): string | null;
+  };
+}
+
 function formatMessage(level: LogLevel, message: string, context?: LogContext, error?: unknown) {
   const base: Record<string, unknown> = {
     level,
@@ -34,6 +40,18 @@ export function createRequestId(): string {
   }
 
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function getRequestId(request: RequestLike): string {
+  return request.headers.get('x-request-id')
+    ?? request.headers.get('X-Request-ID')
+    ?? createRequestId();
+}
+
+export function devLog(...args: unknown[]) {
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(...args);
+  }
 }
 
 export function logDebug(message: string, context?: LogContext) {

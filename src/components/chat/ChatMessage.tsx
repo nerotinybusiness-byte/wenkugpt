@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Copy, RefreshCw, Check, User, Bot } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useMemo } from 'react';
+import { RefreshCw, User, Bot } from 'lucide-react';
 import CitationLink from './CitationLink';
+import type { CitationPayload } from './CitationLink';
 
 interface Source {
     id: string;
@@ -24,18 +24,11 @@ interface ChatMessageProps {
         isLoading?: boolean;
     };
     onRegenerate?: () => void;
-    onCitationClick?: (citation: any) => void;
+    onCitationClick?: (citation: CitationPayload) => void;
 }
 
 export default function ChatMessage({ message, onRegenerate, onCitationClick }: ChatMessageProps) {
     const isUser = message.role === 'user';
-    const [copied, setCopied] = useState(false);
-
-    const handleCopy = () => {
-        navigator.clipboard.writeText(message.content);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
 
     const parsedContent = useMemo(() => {
         if (isUser || !message.sources?.length) return message.content;
@@ -61,7 +54,8 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
                         chunkId={source.chunkId}
                         pageNumber={source.pageNumber}
                         boundingBox={source.boundingBox}
-                        filename={source.filename}
+                        filename={source.filename ?? source.title}
+                        title={source.title}
                         onCitationClick={onCitationClick}
                     />
                 );
@@ -130,7 +124,8 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
                                     chunkId={source.chunkId}
                                     pageNumber={source.pageNumber}
                                     boundingBox={source.boundingBox}
-                                    filename={source.filename}
+                                    filename={source.filename ?? source.title}
+                                    title={source.title}
                                     onCitationClick={onCitationClick}
                                 />
                             ))}

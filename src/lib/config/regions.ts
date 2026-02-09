@@ -1,3 +1,5 @@
+import { devLog } from '@/lib/logger';
+
 /**
  * WENKUGPT - Region Configuration
  * 
@@ -55,9 +57,9 @@ export function logResidencyStatus() {
     const status = verifyEuResidency();
 
     if (status.compliant) {
-        console.log(`🇪🇺 EU Residency Check: COMPLIANT [Supabase: ${status.details.supabase ? 'OK' : 'WARN'}, Redis: ${status.details.redis ? 'OK' : 'WARN'}]`);
+        devLog(`🇪🇺 EU Residency Check: COMPLIANT [Supabase: ${status.details.supabase ? 'OK' : 'WARN'}, Redis: ${status.details.redis ? 'OK' : 'WARN'}]`);
     } else {
         // In dev/local environment often urls are localhost or non-region specific, just warn
-        console.log(`⚠️ EU Residency Check: UNCERTAIN/LOCAL [Supabase: ${status.details.supabase}, Redis: ${status.details.redis}]`);
+        devLog(`⚠️ EU Residency Check: UNCERTAIN/LOCAL [Supabase: ${status.details.supabase}, Redis: ${status.details.redis}]`);
     }
 }

@@ -12,7 +12,7 @@ import fs from 'fs/promises';
 import { db } from '@/lib/db';
 import { documents, chunks as chunksTable } from '@/lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
-import { logError } from '@/lib/logger';
+import { devLog, logError } from '@/lib/logger';
 
 /**
  * Pipeline processing result
@@ -77,37 +77,37 @@ export async function processPipeline(
         throw new Error('userId is required when skipStorage is false.');
     }
 
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`📄 WENKUGPT Ingestion Pipeline`);
-    console.log(`${'='.repeat(60)}`);
-    console.log(`File: ${filename}`);
-    console.log(`Type: ${mimeType}`);
-    console.log(`Size: ${(buffer.length / 1024).toFixed(2)} KB`);
-    console.log(`Access: ${accessLevel}`);
+    devLog(`\n${'='.repeat(60)}`);
+    devLog(`📄 WENKUGPT Ingestion Pipeline`);
+    devLog(`${'='.repeat(60)}`);
+    devLog(`File: ${filename}`);
+    devLog(`Type: ${mimeType}`);
+    devLog(`Size: ${(buffer.length / 1024).toFixed(2)} KB`);
+    devLog(`Access: ${accessLevel}`);
     logResidencyStatus();
-    console.log(`${'='.repeat(60)}\n`);
+    devLog(`${'='.repeat(60)}\n`);
 
     // =========================================================================
     // STEP 1: Parse Document
     // =========================================================================
-    console.log('📖 Step 1: Parsing document...');
+    devLog('📖 Step 1: Parsing document...');
     const parseStart = performance.now();
 
     const document = await parseDocument(buffer, mimeType);
 
     const parseTimeMs = performance.now() - parseStart;
-    console.log(`   ✓ Parsed ${document.pageCount} pages in ${parseTimeMs.toFixed(0)}ms`);
+    devLog(`   ✓ Parsed ${document.pageCount} pages in ${parseTimeMs.toFixed(0)}ms`);
 
     const totalTextBlocks = document.pages.reduce(
         (sum, page) => sum + page.textBlocks.length,
         0
     );
-    console.log(`   ✓ Found ${totalTextBlocks} text blocks`);
+    devLog(`   ✓ Found ${totalTextBlocks} text blocks`);
 
     // =========================================================================
     // STEP 2: Semantic Chunking
     // =========================================================================
-    console.log('\n✂️  Step 2: Semantic chunking...');
+    devLog('\n✂️  Step 2: Semantic chunking...');
     const chunkStart = performance.now();
 
     const chunks = chunkDocument(document.pages, DEFAULT_CHUNKER_CONFIG);
@@ -115,20 +115,20 @@ export async function processPipeline(
     const chunkTimeMs = performance.now() - chunkStart;
     const totalTokens = chunks.reduce((sum, c) => sum + c.tokenCount, 0);
 
-    console.log(`   ✓ Created ${chunks.length} semantic chunks in ${chunkTimeMs.toFixed(0)}ms`);
-    console.log(`   ✓ Total tokens: ~${totalTokens}`);
+    devLog(`   ✓ Created ${chunks.length} semantic chunks in ${chunkTimeMs.toFixed(0)}ms`);
+    devLog(`   ✓ Total tokens: ~${totalTokens}`);
 
     // =========================================================================
     // STEP 3: Generate Embeddings
     // =========================================================================
-    console.log('\n🧠 Step 3: Generating embeddings...');
+    devLog('\n🧠 Step 3: Generating embeddings...');
     const embedStart = performance.now();
 
     let embeddingApiCalls = 0;
     let chunkEmbeddings: number[][] = [];
 
     if (options.skipEmbedding || !isEmbedderConfigured()) {
-        console.log('   ⚠️ Embedding skipped (API key not configured or skipEmbedding=true)');
+        devLog('   ⚠️ Embedding skipped (API key not configured or skipEmbedding=true)');
         // Create placeholder zero vectors
         chunkEmbeddings = chunks.map(() => new Array(768).fill(0));
     } else {
@@ -138,8 +138,8 @@ export async function processPipeline(
         );
         chunkEmbeddings = embedResult.embeddings.map(e => e.embedding);
         embeddingApiCalls = embedResult.apiCalls;
-        console.log(`   ✓ Generated ${embedResult.embeddings.length} embeddings in ${embedResult.processingTimeMs.toFixed(0)}ms`);
-        console.log(`   ✓ API calls: ${embeddingApiCalls}`);
+        devLog(`   ✓ Generated ${embedResult.embeddings.length} embeddings in ${embedResult.processingTimeMs.toFixed(0)}ms`);
+        devLog(`   ✓ API calls: ${embeddingApiCalls}`);
     }
 
     const embedTimeMs = performance.now() - embedStart;
@@ -147,13 +147,13 @@ export async function processPipeline(
     // =========================================================================
     // STEP 4: Store in Database
     // =========================================================================
-    console.log('\n💾 Step 4: Storing in database...');
+    devLog('\n💾 Step 4: Storing in database...');
     const storeStart = performance.now();
 
     let documentId = '';
 
     if (options.skipStorage) {
-        console.log('   ⚠️ Storage skipped (skipStorage=true)');
+        devLog('   ⚠️ Storage skipped (skipStorage=true)');
         documentId = 'skipped';
     } else {
         try {
@@ -169,7 +169,7 @@ export async function processPipeline(
 
                 if (existingDoc.length > 0) {
                     documentId = existingDoc[0].id;
-                    console.log(`   Duplicate file detected, reusing document: ${documentId}`);
+                    devLog(`   Duplicate file detected, reusing document: ${documentId}`);
                     return;
                 }
 
@@ -185,7 +185,7 @@ export async function processPipeline(
                 }).returning();
 
                 documentId = doc.id;
-                console.log(`   ✓ Created document: ${documentId}`);
+                devLog(`   ✓ Created document: ${documentId}`);
 
                 // Prepare chunk records
                 const chunkRecords = chunks.map((chunk, index) => ({
@@ -208,7 +208,7 @@ export async function processPipeline(
                 for (let i = 0; i < chunkRecords.length; i += BATCH_SIZE) {
                     const batch = chunkRecords.slice(i, i + BATCH_SIZE);
                     await tx.insert(chunksTable).values(batch);
-                    console.log(`   ✓ Inserted chunk batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunkRecords.length / BATCH_SIZE)}`);
+                    devLog(`   ✓ Inserted chunk batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunkRecords.length / BATCH_SIZE)}`);
                 }
 
                 // Update document status to completed
@@ -219,7 +219,7 @@ export async function processPipeline(
                     })
                     .where(eq(documents.id, doc.id));
 
-                console.log(`   ✓ Document status: completed`);
+                devLog(`   ✓ Document status: completed`);
             });
         } catch (error) {
             logError('Storage error in ingestion pipeline', { filename, mimeType }, error);
@@ -234,22 +234,22 @@ export async function processPipeline(
     // =========================================================================
     const totalTimeMs = performance.now() - startTime;
 
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`📊 Pipeline Complete - Statistics`);
-    console.log(`${'='.repeat(60)}`);
-    console.log(`   Document ID:   ${documentId}`);
-    console.log(`   Pages:         ${document.pageCount}`);
-    console.log(`   Text blocks:   ${totalTextBlocks}`);
-    console.log(`   Chunks:        ${chunks.length}`);
-    console.log(`   Total tokens:  ~${totalTokens}`);
-    console.log(`   ─────────────────────────────`);
-    console.log(`   Parse time:    ${parseTimeMs.toFixed(0)}ms`);
-    console.log(`   Chunk time:    ${chunkTimeMs.toFixed(0)}ms`);
-    console.log(`   Embed time:    ${embedTimeMs.toFixed(0)}ms`);
-    console.log(`   Store time:    ${storeTimeMs.toFixed(0)}ms`);
-    console.log(`   ─────────────────────────────`);
-    console.log(`   Total time:    ${totalTimeMs.toFixed(0)}ms`);
-    console.log(`${'='.repeat(60)}\n`);
+    devLog(`\n${'='.repeat(60)}`);
+    devLog(`📊 Pipeline Complete - Statistics`);
+    devLog(`${'='.repeat(60)}`);
+    devLog(`   Document ID:   ${documentId}`);
+    devLog(`   Pages:         ${document.pageCount}`);
+    devLog(`   Text blocks:   ${totalTextBlocks}`);
+    devLog(`   Chunks:        ${chunks.length}`);
+    devLog(`   Total tokens:  ~${totalTokens}`);
+    devLog(`   ─────────────────────────────`);
+    devLog(`   Parse time:    ${parseTimeMs.toFixed(0)}ms`);
+    devLog(`   Chunk time:    ${chunkTimeMs.toFixed(0)}ms`);
+    devLog(`   Embed time:    ${embedTimeMs.toFixed(0)}ms`);
+    devLog(`   Store time:    ${storeTimeMs.toFixed(0)}ms`);
+    devLog(`   ─────────────────────────────`);
+    devLog(`   Total time:    ${totalTimeMs.toFixed(0)}ms`);
+    devLog(`${'='.repeat(60)}\n`);
 
     return {
         documentId,
@@ -280,15 +280,15 @@ async function main() {
     const args = process.argv.slice(2);
 
     if (args.length === 0) {
-        console.log('Usage: npx tsx src/lib/ingest/pipeline.ts <path-to-file> [--skip-db] [--skip-embed]');
-        console.log('');
-        console.log('Options:');
-        console.log('  --skip-db     Skip database storage');
-        console.log('  --skip-embed  Skip embedding generation');
-        console.log('');
-        console.log('Examples:');
-        console.log('  npx tsx src/lib/ingest/pipeline.ts ./test.pdf');
-        console.log('  npx tsx src/lib/ingest/pipeline.ts ./test.pdf --skip-db');
+        devLog('Usage: npx tsx src/lib/ingest/pipeline.ts <path-to-file> [--skip-db] [--skip-embed]');
+        devLog('');
+        devLog('Options:');
+        devLog('  --skip-db     Skip database storage');
+        devLog('  --skip-embed  Skip embedding generation');
+        devLog('');
+        devLog('Examples:');
+        devLog('  npx tsx src/lib/ingest/pipeline.ts ./test.pdf');
+        devLog('  npx tsx src/lib/ingest/pipeline.ts ./test.pdf --skip-db');
         process.exit(1);
     }
 
@@ -301,7 +301,7 @@ async function main() {
     const filename = path.basename(filePath);
 
     try {
-        console.log(`Reading file: ${filePath}`);
+        devLog(`Reading file: ${filePath}`);
         const buffer = await fs.readFile(filePath);
 
         const result = await processPipeline(buffer, mimeType, filename, {
@@ -310,15 +310,15 @@ async function main() {
         });
 
         // Show chunk preview
-        console.log('📦 Sample Chunks:');
+        devLog('📦 Sample Chunks:');
         for (const chunk of result.chunks.slice(0, 2)) {
-            console.log(`\n[Chunk ${chunk.index}] Page ${chunk.page}, ~${chunk.tokenCount} tokens`);
-            console.log(`   Header: ${chunk.parentHeader || '(none)'}`);
-            console.log(`   Preview: "${chunk.text.slice(0, 100).replace(/\n/g, ' ')}..."`);
+            devLog(`\n[Chunk ${chunk.index}] Page ${chunk.page}, ~${chunk.tokenCount} tokens`);
+            devLog(`   Header: ${chunk.parentHeader || '(none)'}`);
+            devLog(`   Preview: "${chunk.text.slice(0, 100).replace(/\n/g, ' ')}..."`);
         }
 
     } catch (error) {
-        console.error('❌ Pipeline error:', error);
+        logError('Pipeline CLI error', { route: 'ingest', stage: 'cli' }, error);
         process.exit(1);
     }
 }

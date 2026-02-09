@@ -1,26 +1,15 @@
-
 import React, { useState } from "react";
 import { Sun, Moon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect } from "react";
 
 type ExtendedTheme = "light" | "dark";
 
 export default function ThemeSwitcher() {
     const { theme, setTheme } = useTheme();
-    const [mounted, setMounted] = useState(false);
-    const [previousTheme, setPreviousTheme] = useState<string>("2"); // Default to dark (2)
-
-    // Avoid hydration mismatch
-    useEffect(() => {
-        setMounted(true);
-        if (theme === 'dark') setPreviousTheme("2");
-        else setPreviousTheme("1");
-    }, [theme]);
-
-    if (!mounted) return null;
-
-    const currentTheme = (theme === "system" ? "dark" : theme) as ExtendedTheme;
+    const currentTheme = (theme === "light" ? "light" : "dark") as ExtendedTheme;
+    const [previousTheme, setPreviousTheme] = useState<string>(
+        currentTheme === "light" ? "1" : "2"
+    );
 
     const getOptionNumber = (t: string) => {
         if (t === "light") return "1";

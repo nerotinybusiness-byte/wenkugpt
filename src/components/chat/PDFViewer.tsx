@@ -7,7 +7,6 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
 // Configure PDF worker
-// Configure PDF worker
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 interface BoundingBox {
@@ -33,13 +32,6 @@ export default function PDFViewer({ url, isOpen, onClose, title, highlights = []
     const [containerWidth, setContainerWidth] = useState<number>(0);
     const containerRef = useRef<HTMLDivElement>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
-
-    // Reset state when url changes
-    useEffect(() => {
-        if (isOpen) {
-            setPageNumber(initialPage);
-        }
-    }, [isOpen, url, initialPage]);
 
     // Handle container resize for responsive scaling
     useEffect(() => {

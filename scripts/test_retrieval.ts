@@ -15,7 +15,7 @@ function log(msg: string) {
 }
 
 // Clear log file
-try { fs.writeFileSync(LOG_FILE, ''); } catch (e) { }
+try { fs.writeFileSync(LOG_FILE, ''); } catch { }
 
 async function main() {
     // Dynamic imports

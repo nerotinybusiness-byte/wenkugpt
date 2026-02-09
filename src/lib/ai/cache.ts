@@ -11,6 +11,7 @@ import { semanticCache, type Citation } from '@/lib/db/schema';
 import { sql, gt, and } from 'drizzle-orm';
 import { embedText } from '@/lib/ingest/embedder';
 import CryptoJS from 'crypto-js';
+import { devLog, logError, logWarn } from '@/lib/logger';
 
 /**
  * Cache configuration
@@ -96,7 +97,7 @@ function toRows<T>(result: T[] | { rows: T[] }): T[] {
  */
 export async function lookupCache(query: string): Promise<CachedResponse | null> {
     if (!CACHE_CONFIG.ENABLED) {
-        console.log('🔍 Cache: DISABLED');
+        devLog('🔍 Cache: DISABLED');
         return null;
     }
 
@@ -111,7 +112,7 @@ export async function lookupCache(query: string): Promise<CachedResponse | null>
         if (redisClient) {
             const cachedJson = await redisClient.get<CachedResponse>(`cache:${queryHash}`);
             if (cachedJson) {
-                console.log(`⚡ L1 REDIS HIT: "${query.slice(0, 40)}..." (${Date.now() - startTime}ms)`);
+                devLog(`⚡ L1 REDIS HIT: "${query.slice(0, 40)}..." (${Date.now() - startTime}ms)`);
                 // Restore Date object from JSON string
                 return {
                     ...cachedJson,
@@ -120,7 +121,7 @@ export async function lookupCache(query: string): Promise<CachedResponse | null>
             }
         }
     } catch (error) {
-        console.error('⚠️ Redis lookup failed:', error);
+        logWarn('Redis lookup failed', { route: 'cache', stage: 'redis_lookup' }, error);
         // Continue to L2 cache on Redis failure
     }
 
@@ -158,7 +159,7 @@ export async function lookupCache(query: string): Promise<CachedResponse | null>
             };
             await saveToRedis(queryHash, responseObj);
 
-            console.log(`🔍 L2 DB HIT (exact): "${query.slice(0, 40)}..." (${Date.now() - startTime}ms)`);
+            devLog(`🔍 L2 DB HIT (exact): "${query.slice(0, 40)}..." (${Date.now() - startTime}ms)`);
             return responseObj;
         }
 
@@ -216,7 +217,7 @@ export async function lookupCache(query: string): Promise<CachedResponse | null>
                 // Don't sync semantic matches to Redis yet (Redis is strict hash only)
                 // Optionally: We could cache this specific query hash -> this response in Redis
 
-                console.log(
+                devLog(
                     `🔍 L2 VECTOR HIT: ${(match.similarity * 100).toFixed(1)}% similar ` +
                     `"${query.slice(0, 30)}..." → "${match.query_text.slice(0, 30)}..." ` +
                     `(${Date.now() - startTime}ms)`
@@ -226,11 +227,11 @@ export async function lookupCache(query: string): Promise<CachedResponse | null>
             }
         }
 
-        console.log(`❌ CACHE MISS: "${query.slice(0, 40)}..." (${Date.now() - startTime}ms)`);
+        devLog(`❌ CACHE MISS: "${query.slice(0, 40)}..." (${Date.now() - startTime}ms)`);
         return null;
 
     } catch (error) {
-        console.error('❌ Cache lookup error:', error);
+        logError('Cache lookup error', { route: 'cache', stage: 'lookup' }, error);
         return null;
     }
 }
@@ -245,7 +246,7 @@ async function saveToRedis(hash: string, data: CachedResponse) {
             await redisClient.set(`cache:${hash}`, data, { ex: CACHE_CONFIG.TTL_SECONDS });
         }
     } catch (error) {
-        console.error('⚠️ Failed to save to Redis:', error);
+        logWarn('Failed to save cache entry to Redis', { route: 'cache', stage: 'redis_store' }, error);
     }
 }
 
@@ -315,11 +316,11 @@ export async function storeInCache(
 
         await saveToRedis(queryHash, cacheEntry);
 
-        console.log(`💾 Cache STORED (L1+L2): "${query.slice(0, 40)}..." (TTL: ${CACHE_CONFIG.TTL_SECONDS}s)`);
+        devLog(`💾 Cache STORED (L1+L2): "${query.slice(0, 40)}..." (TTL: ${CACHE_CONFIG.TTL_SECONDS}s)`);
 
         return inserted.id;
     } catch (error) {
-        console.error('❌ Cache store error:', error);
+        logError('Cache store error', { route: 'cache', stage: 'store' }, error);
         return null;
     }
 }
@@ -352,7 +353,7 @@ export async function clearExpiredCache(): Promise<number> {
     const rows = toRows(result);
     const count = rows.length;
     if (count > 0) {
-        console.log(`🧹 Cache: Cleared ${count} expired entries`);
+        devLog(`🧹 Cache: Cleared ${count} expired entries`);
     }
 
     return count;

@@ -2,7 +2,7 @@
 export { };
 import dotenv from 'dotenv';
 import path from 'path';
-import { eq, isNotNull } from 'drizzle-orm';
+import { isNotNull } from 'drizzle-orm';
 
 // Load env
 const envPath = path.join(process.cwd(), '.env.local');

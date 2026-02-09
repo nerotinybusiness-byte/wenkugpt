@@ -1,34 +1,37 @@
 /**
  * WENKUGPT - Settings Store (Zustand)
- * 
- * Reactive state for RAG configuration that updates API behavior in real-time
+ *
+ * Reactive state for RAG configuration that updates API behavior in real-time.
  */
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 /**
- * Available Gemini models
+ * Available Gemini models.
+ * Keep this list aligned with what the backend can safely execute.
  */
 export const GEMINI_MODELS = [
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', description: 'Doporučený stabilní model (vysoká rychlost, nízká latence).' },
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Pokročilý model (může mít omezenou kapacitu).' },
-    { id: 'gemini-3-flash', name: 'Gemini 3 Flash (Preview)', description: 'Nejnovější rychlý model pro vyhledávání.' },
-    { id: 'gemini-3.0-pro-preview', name: 'Gemini 3 Pro (Preview)', description: 'Nejvýkonnější model pro komplexní uvažování.' },
-    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'Stabilní model pro pokročilé úkoly a dlouhý kontext.' },
+    {
+        id: 'gemini-2.5-flash',
+        name: 'Gemini 2.5 Flash',
+        description: 'Stable default for chat generation.',
+    },
 ] as const;
 
+const VALID_GEMINI_MODEL_IDS = new Set<string>(GEMINI_MODELS.map((model) => model.id));
+
 /**
- * Available Claude models for auditor
+ * Available Claude models for auditor.
  */
 export const CLAUDE_MODELS = [
-    { id: 'claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku', description: 'Rychlý, ekonomický' },
-    { id: 'claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet', description: 'Vyvážený' },
-    { id: 'claude-3-opus-latest', name: 'Claude 3 Opus', description: 'Nejvýkonnější' },
+    { id: 'claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku', description: 'Fast, economical' },
+    { id: 'claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet', description: 'Balanced' },
+    { id: 'claude-3-opus-latest', name: 'Claude 3 Opus', description: 'Most capable' },
 ] as const;
 
 /**
- * Settings store state
+ * Settings store state.
  */
 export interface SettingsState {
     // Search settings
@@ -77,7 +80,7 @@ export interface SettingsState {
 }
 
 /**
- * Default settings values
+ * Default settings values.
  */
 const DEFAULT_SETTINGS = {
     vectorWeight: 0.7,
@@ -86,7 +89,7 @@ const DEFAULT_SETTINGS = {
     searchLimit: 20,
     topK: 5,
     minRelevance: 0.3,
-    generatorModel: 'gemini-2.0-flash',
+    generatorModel: 'gemini-2.5-flash',
     auditorModel: 'claude-3-5-haiku-latest',
     temperature: 0.0,
     enableAuditor: true,
@@ -98,8 +101,15 @@ function isPersistedSettingsState(value: unknown): value is Partial<SettingsStat
     return typeof value === 'object' && value !== null;
 }
 
+function sanitizeGeneratorModel(model: unknown): string {
+    const candidate = typeof model === 'string' ? model : '';
+    return VALID_GEMINI_MODEL_IDS.has(candidate)
+        ? candidate
+        : DEFAULT_SETTINGS.generatorModel;
+}
+
 /**
- * Settings store with persistence
+ * Settings store with persistence.
  */
 export const useSettings = create<SettingsState>()(
     persist(
@@ -116,7 +126,8 @@ export const useSettings = create<SettingsState>()(
             setSearchLimit: (limit) => set({ searchLimit: limit }),
             setTopK: (k) => set({ topK: k }),
             setMinRelevance: (relevance) => set({ minRelevance: relevance }),
-            setGeneratorModel: (model) => set({ generatorModel: model }),
+            setGeneratorModel: (model) =>
+                set({ generatorModel: sanitizeGeneratorModel(model) }),
             setAuditorModel: (model) => set({ auditorModel: model }),
             setTemperature: (temp) => set({ temperature: temp }),
             setEnableAuditor: (enabled) => set({ enableAuditor: enabled }),
@@ -127,23 +138,28 @@ export const useSettings = create<SettingsState>()(
         }),
         {
             name: 'wenkugpt-settings',
-            version: 2,
+            version: 3,
             migrate: (persistedState: unknown, version: number) => {
                 if (version === 1) {
-                    // Reset to defaults on version bump to ensure clean model selection
                     return DEFAULT_SETTINGS;
                 }
+
                 if (!isPersistedSettingsState(persistedState)) {
                     return DEFAULT_SETTINGS;
                 }
-                return { ...DEFAULT_SETTINGS, ...persistedState };
+
+                const merged = { ...DEFAULT_SETTINGS, ...persistedState };
+                return {
+                    ...merged,
+                    generatorModel: sanitizeGeneratorModel(merged.generatorModel),
+                };
             },
         }
     )
 );
 
 /**
- * Get current settings for API use (non-reactive)
+ * Get current settings for API use (non-reactive).
  */
 export function getSettings(): Omit<SettingsState,
     'setVectorWeight' | 'setTextWeight' | 'setMinScore' | 'setSearchLimit' |

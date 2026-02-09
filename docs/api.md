@@ -26,6 +26,7 @@ Error responses:
 
 - Identity header: `x-user-email: user@example.com`
 - In `production`, headerless fallback is disabled.
+- In non-production, missing header falls back to `DEV_DEFAULT_USER_EMAIL` or the first `ADMIN_EMAILS` entry.
 - Admin-only endpoints require an allowlisted admin user (`ADMIN_EMAILS`):
   - `POST /api/ingest`
   - `GET /api/documents`
@@ -36,6 +37,7 @@ Error responses:
 ## Core Endpoints
 
 - `POST /api/chat` -> `data: { chatId, response, sources, verified, confidence, stats }`
+  - `settings.generatorModel` currently accepts `gemini-2.5-flash`; unsupported values are sanitized to this default.
 - `GET /api/chat?chatId=...` -> `data: { messages }`
 - `GET /api/history` -> `data: { history, nextCursor }`
 - `DELETE /api/history` -> `data: { cleared: true }`

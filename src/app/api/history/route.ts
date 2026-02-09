@@ -4,6 +4,7 @@ import { chats } from '@/lib/db/schema';
 import { and, desc, eq, lt } from 'drizzle-orm';
 import { requireUser } from '@/lib/auth/request-auth';
 import { apiError, apiSuccess } from '@/lib/api/response';
+import { getRequestId, logError } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
     try {
@@ -50,7 +51,8 @@ export async function GET(request: NextRequest) {
         });
 
     } catch (error) {
-        console.error('History API Error:', error);
+        const requestId = getRequestId(request);
+        logError('History GET error', { route: '/api/history', requestId }, error);
         return apiError('HISTORY_FETCH_FAILED', 'Failed to fetch history', 500);
     }
 }
@@ -67,7 +69,8 @@ export async function DELETE(request: NextRequest) {
         return apiSuccess({ cleared: true });
 
     } catch (error) {
-        console.error('Clear History Error:', error);
+        const requestId = getRequestId(request);
+        logError('History DELETE error', { route: '/api/history', requestId }, error);
         return apiError('HISTORY_CLEAR_FAILED', 'Failed to clear history', 500);
     }
 }

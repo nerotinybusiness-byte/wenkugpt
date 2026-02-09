@@ -4,6 +4,16 @@ dotenv.config({ path: '.env.local' });
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as fs from 'fs';
 
+type EmbeddingResponse = {
+    embedding: {
+        values: number[];
+    };
+};
+
+type EmbedModel = {
+    embedContent: (payload: unknown) => Promise<EmbeddingResponse>;
+};
+
 const logFile = 'api_log.txt';
 fs.writeFileSync(logFile, '--- API Check Log ---\n');
 
@@ -52,25 +62,23 @@ async function testModel(modelName: string) {
 
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: modelName });
-        // @ts-ignore
-        const result = await model.embedContent({
+        const embeddingModel = model as unknown as EmbedModel;
+        const result = await embeddingModel.embedContent({
             content: { role: 'user', parts: [{ text: "Hello world" }] },
             taskType: 'RETRIEVAL_DOCUMENT',
         });
 
         // Also test with outputDimensionality if supported
         try {
-            const model768 = genAI.getGenerativeModel({ model: modelName }, { apiVersion: 'v1beta' });
+            genAI.getGenerativeModel({ model: modelName }, { apiVersion: 'v1beta' });
             // Note: outputDimensionality is a parameter of embedContent in REST, but SDK map might vary.
             // In Node SDK, it's passed in generationConfig or similar? 
             // Actually, for embedding, it is not in generationConfig. It's often not supported in SDK < 0.12?
-            // But let's try passing it in the request object if typed allows, or cast it.
-            // @ts-ignore
-            const result768 = await model.embedContent({
+            // But let's try passing it in the request object.
+            const result768 = await embeddingModel.embedContent({
                 content: { role: 'user', parts: [{ text: "Hello world" }] },
                 outputDimensionality: 768
-            } as any);
-            // @ts-ignore
+            });
             const vec768 = result768.embedding.values;
             log(`✅ SUCCESS with outputDimensionality: 768. Result Vector length: ${vec768.length}`);
         } catch (e: any) {

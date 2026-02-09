@@ -9,16 +9,16 @@
  * With semantic caching for instant retrieval of similar queries
  */
 
-import { hybridSearch, getChunkById, type SearchResult, type HybridSearchConfig, DEFAULT_SEARCH_CONFIG } from '@/lib/db/queries';
-import { rerankResults, type RerankedResult, DEFAULT_RERANKER_CONFIG } from './reranker';
-import { lookupCache, storeInCache, CACHE_CONFIG } from './cache';
+import { hybridSearch, getChunkById, type HybridSearchConfig, DEFAULT_SEARCH_CONFIG } from '@/lib/db/queries';
+import { rerankResults, DEFAULT_RERANKER_CONFIG } from './reranker';
+import { lookupCache, storeInCache } from './cache';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { generateText } from 'ai';
 import { db } from '@/lib/db';
 import { documents } from '@/lib/db/schema';
 import type { Citation } from '@/lib/db/schema';
-import { logError } from '@/lib/logger';
+import { devLog, logError } from '@/lib/logger';
 
 /**
  * Source chunk with citation ID
@@ -98,6 +98,8 @@ export interface RAGConfig {
     skipGeneration?: boolean;
 }
 
+const DEFAULT_GENERATOR_MODEL = 'gemini-2.5-flash';
+
 /**
  * Default RAG configuration
  */
@@ -105,7 +107,7 @@ export const DEFAULT_RAG_CONFIG: RAGConfig = {
     search: DEFAULT_SEARCH_CONFIG,
     topK: 5,
     confidenceThreshold: 0.85,
-    generatorModel: 'gemini-2.0-flash',
+    generatorModel: DEFAULT_GENERATOR_MODEL,
     auditorModel: 'claude-3-5-haiku-latest',
     temperature: 0.0,
     skipVerification: false,
@@ -203,11 +205,11 @@ async function agentRetriever(
 ): Promise<{ sources: SourceChunk[]; timeMs: number }> {
     const startTime = performance.now();
 
-    console.log('\n🔍 Agent 1 (Retriever): Searching...');
+    devLog('\n🔍 Agent 1 (Retriever): Searching...');
 
     // Step 1: Hybrid search
     const searchResults = await hybridSearch(query, config.search);
-    console.log(`   Found ${searchResults.length} initial results`);
+    devLog(`   Found ${searchResults.length} initial results`);
 
     // Step 2: Rerank
     const reranked = await rerankResults(query, searchResults, {
@@ -229,7 +231,7 @@ async function agentRetriever(
     }));
 
     const timeMs = performance.now() - startTime;
-    console.log(`   ✓ Selected ${sources.length} sources in ${timeMs.toFixed(0)}ms`);
+    devLog(`   ✓ Selected ${sources.length} sources in ${timeMs.toFixed(0)}ms`);
 
     return { sources, timeMs };
 }
@@ -245,7 +247,7 @@ async function agentGenerator(
 ): Promise<{ response: string; timeMs: number }> {
     const startTime = performance.now();
 
-    console.log('\n✍️  Agent 2 (Generator): Creating response...');
+    devLog('\n✍️  Agent 2 (Generator): Creating response...');
 
     if (sources.length === 0) {
         return {
@@ -268,7 +270,7 @@ async function agentGenerator(
     });
 
     const timeMs = performance.now() - startTime;
-    console.log(`   ✓ Generated response in ${timeMs.toFixed(0)}ms`);
+    devLog(`   ✓ Generated response in ${timeMs.toFixed(0)}ms`);
 
     return { response: result.text, timeMs };
 }
@@ -292,11 +294,11 @@ async function agentAuditor(
 }> {
     const startTime = performance.now();
 
-    console.log('\n🧐 Agent 3 (Auditor): Verifying claims...');
+    devLog('\n🧐 Agent 3 (Auditor): Verifying claims...');
 
     // Skip verification if configured
     if (config.skipVerification) {
-        console.log('   ⚠️ Verification skipped');
+        devLog('   ⚠️ Verification skipped');
         return {
             verified: true,
             assessment: 'Verification skipped',
@@ -310,7 +312,7 @@ async function agentAuditor(
 
     // Check if Claude is configured
     if (!process.env.ANTHROPIC_API_KEY) {
-        console.log('   ⚠️ Claude not configured, skipping verification');
+        devLog('   ⚠️ Claude not configured, skipping verification');
         return {
             verified: true,
             assessment: 'No auditor available',
@@ -345,9 +347,9 @@ async function agentAuditor(
         const audit = JSON.parse(jsonMatch[0]);
 
         const timeMs = performance.now() - startTime;
-        console.log(`   ✓ Verification complete in ${timeMs.toFixed(0)}ms`);
-        console.log(`   Confidence: ${(audit.confidence * 100).toFixed(0)}%`);
-        console.log(`   Verified: ${audit.verified}`);
+        devLog(`   ✓ Verification complete in ${timeMs.toFixed(0)}ms`);
+        devLog(`   Confidence: ${(audit.confidence * 100).toFixed(0)}%`);
+        devLog(`   Verified: ${audit.verified}`);
 
         return {
             verified: audit.verified && audit.confidence >= config.confidenceThreshold,
@@ -386,8 +388,8 @@ export async function executeRAG(
 ): Promise<RAGResponse> {
     const startTime = performance.now();
 
-    console.log(`Query: "${query}"`);
-    console.log(`${'='.repeat(60)}`);
+    devLog(`Query: "${query}"`);
+    devLog(`${'='.repeat(60)}`);
 
     // ============================================================
     // CACHE CHECK - Try to find cached response first
@@ -397,14 +399,14 @@ export async function executeRAG(
     if (cached) {
         const totalTimeMs = performance.now() - startTime;
 
-        console.log(`\n${'='.repeat(60)}`);
-        console.log(`⚡ CACHE HIT - Instant Response`);
-        console.log(`${'='.repeat(60)}`);
-        console.log(`   Original query: "${cached.queryText.slice(0, 40)}..."`);
-        console.log(`   Hit count: ${cached.hitCount}`);
-        console.log(`   Confidence: ${(cached.confidence * 100).toFixed(0)}%`);
-        console.log(`   Total time: ${totalTimeMs.toFixed(0)}ms (saved ~2000ms)`);
-        console.log(`${'='.repeat(60)}\n`);
+        devLog(`\n${'='.repeat(60)}`);
+        devLog(`⚡ CACHE HIT - Instant Response`);
+        devLog(`${'='.repeat(60)}`);
+        devLog(`   Original query: "${cached.queryText.slice(0, 40)}..."`);
+        devLog(`   Hit count: ${cached.hitCount}`);
+        devLog(`   Confidence: ${(cached.confidence * 100).toFixed(0)}%`);
+        devLog(`   Total time: ${totalTimeMs.toFixed(0)}ms (saved ~2000ms)`);
+        devLog(`${'='.repeat(60)}\n`);
 
         // Rehydrate sources from DB so citation click still has filename/page/bbox.
         const cachedCitations = cached.citations || [];
@@ -458,7 +460,7 @@ export async function executeRAG(
             const docs = await db.select().from(documents).limit(1);
 
             if (docs.length === 0) {
-                console.log('   ⚠️ Database is empty (0 documents)');
+                devLog('   ⚠️ Database is empty (0 documents)');
                 return {
                     response: 'Aktuálně nemám k dispozici žádné dokumenty. Prosím nahrajte soubory v sekci "Manage Files", abych mohl odpovídat na vaše dotazy.',
                     sources: [],
@@ -480,7 +482,7 @@ export async function executeRAG(
                 };
             }
         } catch (dbError) {
-            console.error('   ❌ Database check failed:', dbError);
+            logError('Database precheck failed', { route: 'rag', stage: 'precheck' }, dbError);
             // Fallthrough to normal "Not found" response if check fails
         }
     }
@@ -490,7 +492,7 @@ export async function executeRAG(
     let generationTimeMs = 0;
 
     if (config.skipGeneration) {
-        console.log('   ⚠️ Generation skipped');
+        devLog('   ⚠️ Generation skipped');
         rawResponse = 'Generation skipped (Debug Mode)';
     } else {
         const genResult = await agentGenerator(
@@ -518,7 +520,7 @@ export async function executeRAG(
     // CACHE STORE - Save verified response for future queries
     // ============================================================
     if (audit.verified && audit.confidence >= config.confidenceThreshold) {
-        const citations: Citation[] = sources.map((s, i) => ({
+        const citations: Citation[] = sources.map((s) => ({
             id: s.citationId,
             chunkId: s.chunkId,
             page: s.pageNumber,
@@ -534,15 +536,15 @@ export async function executeRAG(
         );
     }
 
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`📊 RAG Complete`);
-    console.log(`${'='.repeat(60)}`);
-    console.log(`   Sources used: ${sources.length}`);
-    console.log(`   Verified: ${audit.verified ? '✓' : '✗'}`);
-    console.log(`   Confidence: ${(audit.confidence * 100).toFixed(0)}%`);
-    console.log(`   Total time: ${totalTimeMs.toFixed(0)}ms`);
-    console.log(`   Cached: ${audit.verified && audit.confidence >= config.confidenceThreshold ? '✓' : '✗'}`);
-    console.log(`${'='.repeat(60)}\n`);
+    devLog(`\n${'='.repeat(60)}`);
+    devLog(`📊 RAG Complete`);
+    devLog(`${'='.repeat(60)}`);
+    devLog(`   Sources used: ${sources.length}`);
+    devLog(`   Verified: ${audit.verified ? '✓' : '✗'}`);
+    devLog(`   Confidence: ${(audit.confidence * 100).toFixed(0)}%`);
+    devLog(`   Total time: ${totalTimeMs.toFixed(0)}ms`);
+    devLog(`   Cached: ${audit.verified && audit.confidence >= config.confidenceThreshold ? '✓' : '✗'}`);
+    devLog(`${'='.repeat(60)}\n`);
 
     return {
         response: finalResponse,

@@ -6,6 +6,7 @@
  */
 
 import { GoogleGenerativeAI, TaskType } from '@google/generative-ai';
+import { devLog, logWarn } from '@/lib/logger';
 
 interface EmbedContentRequestCompat {
     content: {
@@ -122,7 +123,7 @@ export async function embedTexts(
         const batch = texts.slice(i, i + config.batchSize);
         const batchIndices = batch.map((_, idx) => i + idx);
 
-        console.log(`   📤 Embedding batch ${Math.floor(i / config.batchSize) + 1}/${Math.ceil(texts.length / config.batchSize)} (${batch.length} texts)`);
+        devLog(`   📤 Embedding batch ${Math.floor(i / config.batchSize) + 1}/${Math.ceil(texts.length / config.batchSize)} (${batch.length} texts)`);
 
         // Embed each text in the batch
         // Note: text-embedding-004 supports batch embedding via embedContent
@@ -146,7 +147,11 @@ export async function embedTexts(
                         index: batchIndices[batchIdx],
                     };
                 } catch (error) {
-                    console.error(`   ⚠️ Failed to embed text at index ${batchIndices[batchIdx]}:`, error);
+                    logWarn(
+                        'Failed to embed text item',
+                        { route: 'ingest', stage: 'embed', index: batchIndices[batchIdx] },
+                        error
+                    );
                     // Return zero vector on failure
                     return {
                         text,

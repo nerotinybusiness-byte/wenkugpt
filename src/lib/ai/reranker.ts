@@ -6,6 +6,7 @@
 
 import { CohereClient } from 'cohere-ai';
 import type { SearchResult } from '@/lib/db/queries';
+import { devLog, logError } from '@/lib/logger';
 
 /**
  * Reranking configuration
@@ -73,15 +74,15 @@ export async function rerankResults(
     config: RerankerConfig = DEFAULT_RERANKER_CONFIG
 ): Promise<RerankedResult[]> {
     if (results.length === 0) {
-        console.log('   ⚠️ No results to rerank');
+        devLog('   ⚠️ No results to rerank');
         return [];
     }
 
-    console.log(`\n🎯 Reranking ${results.length} results with Cohere...`);
+    devLog(`\n🎯 Reranking ${results.length} results with Cohere...`);
 
     // Check if reranker is available
     if (!isRerankerConfigured()) {
-        console.log('   ⚠️ Cohere not configured, using original ranking');
+        devLog('   ⚠️ Cohere not configured, using original ranking');
         // Return results with fake relevance scores based on combined score
         return results.slice(0, config.topK).map((result, index) => ({
             ...result,
@@ -113,17 +114,17 @@ export async function rerankResults(
                 originalRank: r.index + 1,
             }));
 
-        console.log(`   ✓ Selected top ${reranked.length} results`);
+        devLog(`   ✓ Selected top ${reranked.length} results`);
 
         // Log score improvements
         for (const result of reranked.slice(0, 3)) {
-            console.log(`     ${result.originalRank}→ Score: ${result.relevanceScore.toFixed(3)} | "${result.content.slice(0, 40)}..."`);
+            devLog(`     ${result.originalRank}→ Score: ${result.relevanceScore.toFixed(3)} | "${result.content.slice(0, 40)}..."`);
         }
 
         return reranked;
 
     } catch (error) {
-        console.error('   ❌ Reranking failed:', error);
+        logError('Reranking failed', { route: 'rag', stage: 'reranker' }, error);
         // Fallback to original ranking
         return results.slice(0, config.topK).map((result, index) => ({
             ...result,

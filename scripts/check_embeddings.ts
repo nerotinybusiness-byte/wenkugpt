@@ -2,7 +2,7 @@
 export { };
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
-import { isNull, sql, count } from 'drizzle-orm';
+import { isNull, count } from 'drizzle-orm';
 import * as fs from 'fs';
 
 const logFile = 'embeddings_log.txt';
