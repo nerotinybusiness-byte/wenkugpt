@@ -56,6 +56,71 @@ export interface ParsedDocument {
 }
 
 /**
+ * Ensure PDF.js node polyfills exist in server runtime.
+ * pdf-parse/pdfjs may require DOMMatrix/ImageData/Path2D on Vercel Node runtime.
+ */
+async function ensurePdfNodePolyfills(): Promise<void> {
+    if (typeof window !== 'undefined') return;
+
+    const globalPolyfills = globalThis as Record<string, unknown>;
+    if (globalPolyfills.DOMMatrix && globalPolyfills.ImageData && globalPolyfills.Path2D) {
+        return;
+    }
+
+    const loadCanvasModule = async (): Promise<Record<string, unknown>> => {
+        try {
+            const imported = await import('@napi-rs/canvas');
+            return imported as unknown as Record<string, unknown>;
+        } catch (importError) {
+            try {
+                const { createRequire } = await import('module');
+                const path = await import('path');
+                const require = createRequire(path.join(process.cwd(), 'package.json'));
+                return require('@napi-rs/canvas') as Record<string, unknown>;
+            } catch (requireError) {
+                const importMessage = importError instanceof Error ? importError.message : 'Unknown import error';
+                const requireMessage = requireError instanceof Error ? requireError.message : 'Unknown require error';
+                throw new Error(`Cannot load @napi-rs/canvas (${importMessage}; ${requireMessage})`);
+            }
+        }
+    };
+
+    try {
+        const rawCanvas = await loadCanvasModule();
+        const canvasDefault = rawCanvas.default;
+        const canvas = (
+            canvasDefault && typeof canvasDefault === 'object'
+                ? { ...rawCanvas, ...(canvasDefault as Record<string, unknown>) }
+                : rawCanvas
+        );
+
+        if (!globalPolyfills.DOMMatrix && canvas.DOMMatrix) {
+            globalPolyfills.DOMMatrix = canvas.DOMMatrix;
+        }
+        if (!globalPolyfills.ImageData && canvas.ImageData) {
+            globalPolyfills.ImageData = canvas.ImageData;
+        }
+        if (!globalPolyfills.Path2D && canvas.Path2D) {
+            globalPolyfills.Path2D = canvas.Path2D;
+        }
+    } catch (error) {
+        throw new Error(
+            `PDF runtime polyfill init failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+    }
+
+    const missing = ['DOMMatrix', 'ImageData', 'Path2D'].filter(
+        (name) => !globalPolyfills[name]
+    );
+
+    if (missing.length > 0) {
+        throw new Error(
+            `PDF runtime polyfill init failed: Missing ${missing.join(', ')}. Ensure @napi-rs/canvas is available in runtime dependencies.`
+        );
+    }
+}
+
+/**
  * Normalize PDF coordinates to 0.0-1.0 range with Y-axis flip
  * 
  * PDF coordinate system:
@@ -101,18 +166,6 @@ function normalizeBoundingBox(
     };
 }
 
-// Type definitions for pdf-parse
-interface PdfParseResult {
-    numpages: number;
-    info: {
-        Title?: string;
-        Author?: string;
-        Subject?: string;
-        Creator?: string;
-    };
-    text: string;
-}
-
 // Type definitions for pdfjs-dist items
 interface PDFTextItem {
     str: string;
@@ -130,10 +183,27 @@ interface PDFPageProxy {
     getTextContent(): Promise<PDFTextContent>;
 }
 
-interface PDFDocumentProxy {
-    numPages: number;
-    getPage(pageNumber: number): Promise<PDFPageProxy>;
-    getMetadata(): Promise<{ info: any; metadata: any }>;
+interface PDFParseInstance {
+    getInfo(): Promise<{
+        info?: {
+            Title?: string;
+            Author?: string;
+            Subject?: string;
+            Creator?: string;
+        };
+    }>;
+    load?: () => Promise<{ numPages: number; getPage(pageNumber: number): Promise<PDFPageProxy> }>;
+    destroy?: () => Promise<void> | void;
+}
+
+interface PDFParseClass {
+    new (options: { data: Uint8Array }): PDFParseInstance;
+    setWorker(workerSrc: string): void;
+}
+
+interface PDFParseModule {
+    PDFParse?: PDFParseClass;
+    default?: Record<string, unknown>;
 }
 
 /**
@@ -207,18 +277,24 @@ async function extractPageContent(
  * @returns Parsed document with text and normalized coordinates
  */
 export async function parsePDF(buffer: Buffer | Uint8Array): Promise<ParsedDocument> {
-    // Import the class explicitly (it's a named export in v2.4.5)
-    // @ts-ignore - dynamic imports for ESM compatibility
-    const { PDFParse } = await import('pdf-parse');
+    await ensurePdfNodePolyfills();
+
+    const pdfParseModule = await import('pdf-parse') as unknown as PDFParseModule;
+    const PDFParse = pdfParseModule.PDFParse
+        ?? (pdfParseModule.default?.PDFParse as PDFParseClass | undefined);
+    if (!PDFParse) {
+        throw new Error('pdf-parse did not expose PDFParse class');
+    }
 
     // Configure worker for Node.js environment
     if (typeof window === 'undefined') {
+        const { createRequire } = await import('module');
         const path = await import('path');
         const url = await import('url');
+        const require = createRequire(path.join(process.cwd(), 'package.json'));
 
-        // Since we used NPM Overrides to force pdf-parse to use the same pdfjs-dist version as root,
-        // we can simply point to the standard worker location.
-        const workerPath = path.join(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs');
+        // Resolve worker from package to avoid filesystem path assumptions in serverless.
+        const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
 
         // Use static method on the class to set worker source
         PDFParse.setWorker(url.pathToFileURL(workerPath).href);
@@ -238,8 +314,10 @@ export async function parsePDF(buffer: Buffer | Uint8Array): Promise<ParsedDocum
         const { info } = infoResult;
 
         // Ensure doc is loaded for page access
-        // @ts-ignore - load is marked private/protected but needed to access doc
-        const pdfDocument = await (parser as any).load();
+        if (typeof parser.load !== 'function') {
+            throw new Error('pdf-parse parser instance does not expose load()');
+        }
+        const pdfDocument = await parser.load();
 
         const pages: ParsedPage[] = [];
 

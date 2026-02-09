@@ -15,6 +15,42 @@ interface FileWithStatus {
     message?: string;
 }
 
+interface ApiSuccess<T> {
+    success: true;
+    data: T;
+    error: null;
+    code: null;
+}
+
+interface ApiError {
+    success: false;
+    data: null;
+    error?: string;
+    code?: string;
+}
+
+type ApiResponse<T> = ApiSuccess<T> | ApiError;
+
+function toUserFriendlyUploadMessage(rawMessage: string): string {
+    const normalized = rawMessage.toLowerCase();
+
+    if (
+        normalized.includes('dommatrix') ||
+        normalized.includes('pdf runtime polyfill') ||
+        normalized.includes('@napi-rs/canvas')
+    ) {
+        return 'PDF parser na serveru neni spravne nakonfigurovany (DOMMatrix). Nahraj TXT nebo to zkus po nasazeni opravy serveru.';
+    }
+
+    return rawMessage;
+}
+
+function isAllowedFile(file: File): boolean {
+    if (file.type === 'application/pdf' || file.type === 'text/plain') return true;
+    const lower = file.name.toLowerCase();
+    return lower.endsWith('.pdf') || lower.endsWith('.txt');
+}
+
 export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
     const [isDragging, setIsDragging] = useState(false);
     const [files, setFiles] = useState<FileWithStatus[]>([]);
@@ -33,96 +69,107 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
     const handleDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault();
         setIsDragging(false);
-
         if (e.dataTransfer.files?.length > 0) {
             addFiles(Array.from(e.dataTransfer.files));
         }
-    }, []);
+    }, [files]);
 
     const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files?.length) {
             addFiles(Array.from(e.target.files));
         }
-        // Reset input to allow selecting same files again
         if (fileInputRef.current) fileInputRef.current.value = '';
-    }, []);
+    }, [files]);
 
     const addFiles = (newFiles: File[]) => {
         const validFiles: FileWithStatus[] = [];
 
-        newFiles.forEach(file => {
-            // 50MB Limit
+        newFiles.forEach((file) => {
             if (file.size > 50 * 1024 * 1024) {
                 alert(`File ${file.name} is too large (max 50MB)`);
                 return;
             }
-            if (file.type !== 'application/pdf') {
-                alert(`File ${file.name} is not a PDF`);
+            if (!isAllowedFile(file)) {
+                alert(`File ${file.name} is not a supported type (PDF/TXT)`);
                 return;
             }
-
-            // Check if already exists
-            if (files.some(f => f.file.name === file.name && f.file.size === file.size)) {
+            if (files.some((f) => f.file.name === file.name && f.file.size === file.size)) {
                 return;
             }
 
             validFiles.push({
                 id: Math.random().toString(36).substring(7),
                 file,
-                status: 'pending'
+                status: 'pending',
             });
         });
 
-        setFiles(prev => [...prev, ...validFiles]);
+        setFiles((prev) => [...prev, ...validFiles]);
     };
 
     const removeFile = (id: string) => {
-        setFiles(prev => prev.filter(f => f.id !== id));
+        setFiles((prev) => prev.filter((f) => f.id !== id));
     };
 
     const uploadFile = async (fileWrapper: FileWithStatus) => {
-        setFiles(prev => prev.map(f => f.id === fileWrapper.id ? { ...f, status: 'uploading' } : f));
+        setFiles((prev) => prev.map((f) => (f.id === fileWrapper.id ? { ...f, status: 'uploading' } : f)));
 
         const formData = new FormData();
         formData.append('file', fileWrapper.file);
-        formData.append('accessLevel', 'private');
+        formData.append('options', JSON.stringify({
+            accessLevel: 'private',
+            skipEmbedding: false,
+        }));
 
         try {
             const response = await fetch('/api/ingest', {
                 method: 'POST',
                 body: formData,
             });
+            const raw = await response.text();
+            let payload: ApiResponse<{ documentId: string }> | null = null;
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Upload failed');
+            if (raw) {
+                try {
+                    payload = JSON.parse(raw) as ApiResponse<{ documentId: string }>;
+                } catch {
+                    payload = null;
+                }
             }
 
-            setFiles(prev => prev.map(f => f.id === fileWrapper.id ? { ...f, status: 'success' } : f));
-            if (onUploadComplete) onUploadComplete();
+            if (!response.ok) {
+                throw new Error(payload?.error || `Upload failed (${response.status})`);
+            }
+            if (!payload?.success) {
+                throw new Error(payload?.error || 'Upload failed');
+            }
 
+            setFiles((prev) => prev.map((f) => (f.id === fileWrapper.id ? { ...f, status: 'success' } : f)));
+            if (onUploadComplete) onUploadComplete();
         } catch (error) {
-            console.error('Upload error:', error);
-            setFiles(prev => prev.map(f => f.id === fileWrapper.id ? {
-                ...f,
-                status: 'error',
-                message: error instanceof Error ? error.message : 'Upload failed'
-            } : f));
+            const rawMessage = error instanceof Error ? error.message : 'Upload failed';
+            const userMessage = toUserFriendlyUploadMessage(rawMessage);
+
+            setFiles((prev) => prev.map((f) => {
+                if (f.id !== fileWrapper.id) return f;
+                return {
+                    ...f,
+                    status: 'error',
+                    message: userMessage,
+                };
+            }));
         }
     };
 
     const handleUploadAll = async () => {
-        const pendingFiles = files.filter(f => f.status === 'pending' || f.status === 'error');
-
-        // Upload sequentially to avoid overwhelming server limits/CPU
+        const pendingFiles = files.filter((f) => f.status === 'pending' || f.status === 'error');
         for (const file of pendingFiles) {
             await uploadFile(file);
         }
     };
 
-    const isUploading = files.some(f => f.status === 'uploading' || f.status === 'processing');
-    const pendingCount = files.filter(f => f.status === 'pending' || f.status === 'error').length;
+    const isUploading = files.some((f) => f.status === 'uploading' || f.status === 'processing');
+    const pendingCount = files.filter((f) => f.status === 'pending' || f.status === 'error').length;
 
     return (
         <div className="w-full space-y-4">
@@ -143,8 +190,8 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                     type="file"
                     ref={fileInputRef}
                     className="hidden"
-                    accept=".pdf"
-                    multiple // Enable multiple files
+                    accept=".pdf,.txt,text/plain,application/pdf"
+                    multiple
                     onChange={handleFileSelect}
                 />
 
@@ -152,22 +199,26 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                     className="text-center select-none cursor-pointer flex flex-col items-center"
                     onClick={() => !isUploading && fileInputRef.current?.click()}
                 >
-                    <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                    <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
                         <Upload className={`w-6 h-6 text-white/40 ${isDragging ? 'text-emerald-500' : ''}`} />
                     </div>
-                    <h3 className="text-base font-medium">Drop PDFs here</h3>
-                    <p className="text-xs text-white/40 mt-1 uppercase tracking-wider">Max 50MB • Multiple Files</p>
+                    <h3 className="text-base font-medium">Drop PDF/TXT files here</h3>
+                    <p className="text-xs text-white/40 mt-1 uppercase tracking-wider">Max 50MB - Multiple Files</p>
                 </div>
             </div>
 
-            {/* File Queue */}
             {files.length > 0 && (
                 <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-                    {files.map(wrap => (
+                    {files.map((wrap) => (
                         <div key={wrap.id} className="bg-white/5 rounded-lg p-3 flex items-center gap-3 border border-white/10">
-                            <FileText className={`w-5 h-5 ${wrap.status === 'success' ? 'text-emerald-500' :
-                                wrap.status === 'error' ? 'text-red-500' : 'text-emerald-500/50'
-                                }`} />
+                            <FileText
+                                className={`w-5 h-5 ${wrap.status === 'success'
+                                    ? 'text-emerald-500'
+                                    : wrap.status === 'error'
+                                        ? 'text-red-500'
+                                        : 'text-emerald-500/50'
+                                    }`}
+                            />
 
                             <div className="flex-1 min-w-0">
                                 <div className="flex justify-between items-center mb-0.5">
@@ -205,7 +256,7 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                     {isUploading ? (
                         <>
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Uploading {files.filter(f => f.status === 'uploading').length} files...
+                            Uploading {files.filter((f) => f.status === 'uploading').length} files...
                         </>
                     ) : (
                         <>

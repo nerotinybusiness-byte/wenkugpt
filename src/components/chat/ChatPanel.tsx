@@ -9,16 +9,12 @@
 
 // ... imports
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useSettings, getSettings } from '@/lib/settings/store';
-import { PrivacyBadge } from '@/components/ui/PrivacyBadge';
+import { useSettings, getSettings, type SettingsState } from '@/lib/settings/store';
 import Link from 'next/link';
-import { FileText, Sun, Moon, Settings, MessageSquarePlus, History, Trash2, StopCircle } from 'lucide-react';
+import { FileText, MessageSquarePlus, History, Trash2 } from 'lucide-react';
 
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
-import EmptyState from './EmptyState';
-import { Button } from '@/components/ui/button';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import { SettingsDialog } from './SettingsDialog';
 import dynamic from 'next/dynamic';
@@ -52,8 +48,46 @@ interface Message {
 }
 
 interface ChatPanelProps {
-    onCitationClick?: (citation: any) => void;
+    onCitationClick?: (citation: Source) => void;
     onSourcesChange?: (sources: Source[]) => void;
+}
+
+interface HistoryItem {
+    id: string;
+    title: string;
+}
+
+interface ChatApiMessage {
+    id: string;
+    content: string;
+    role: 'user' | 'assistant' | 'system';
+    sources?: Source[] | null;
+}
+
+interface ApiSuccess<T> {
+    success: true;
+    data: T;
+    error: null;
+    code: null;
+}
+
+interface ApiError {
+    success: false;
+    data: null;
+    error?: string;
+    code?: string;
+    details?: string;
+}
+
+type ApiResponse<T> = ApiSuccess<T> | ApiError;
+
+interface ChatPostResponseData {
+    chatId: string;
+    response: string;
+    sources: Source[];
+    verified: boolean;
+    confidence: number;
+    stats?: SettingsState['lastStats'];
 }
 
 export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPanelProps) {
@@ -66,21 +100,21 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
     const abortControllerRef = useRef<AbortController | null>(null);
     const [chatId, setChatId] = useState<string | null>(null);
 
-    const [scrollAtBottom, setScrollAtBottom] = useState(true);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const [history, setHistory] = useState<any[]>([]);
+    const [history, setHistory] = useState<HistoryItem[]>([]);
 
     // PDF Viewer State
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [pdfTitle, setPdfTitle] = useState<string>('');
     const [isPdfOpen, setIsPdfOpen] = useState(false);
     const [initialPage, setInitialPage] = useState<number>(1);
-    const [highlights, setHighlights] = useState<{ page: number; bbox: any }[]>([]);
+    const [highlights, setHighlights] = useState<Array<{ page: number; bbox: NonNullable<Source['boundingBox']> }>>([]);
 
     const onCitationSelect = (source: Source) => {
         console.log('ChatPanel: Citation clicked', source);
+        onCitationClick?.(source);
 
         // Defensive check for filename
         if (!source || (!source.filename && !source.title)) {
@@ -95,15 +129,13 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
             if (filename.startsWith('http')) {
                 setPdfUrl(filename);
             } else {
-                const basename = filename.split(/[/\\]/).pop();
-
                 // Use Supabase Storage Public URL
                 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
                 if (supabaseUrl) {
-                    setPdfUrl(`${supabaseUrl}/storage/v1/object/public/documents/${basename}`);
+                    setPdfUrl(`${supabaseUrl}/storage/v1/object/public/documents/${filename}`);
                 } else {
                     // Fallback for local dev if env missing (shouldn't happen)
-                    setPdfUrl(`/documents/${basename}`);
+                    setPdfUrl(`/documents/${filename}`);
                 }
             }
             setPdfTitle(filename.split(/[/\\]/).pop() || 'Document');
@@ -134,10 +166,10 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
 
         try {
             const res = await fetch(`/api/chat?chatId=${id}`);
-            const data = await res.json();
+            const payload = await res.json() as ApiResponse<{ messages: ChatApiMessage[] }>;
 
-            if (data.messages) {
-                const loadedMessages = data.messages.map((msg: any) => ({
+            if (payload.success && payload.data.messages) {
+                const loadedMessages = payload.data.messages.map((msg) => ({
                     id: msg.id,
                     content: msg.content,
                     isUser: msg.role === 'user',
@@ -175,10 +207,12 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
     // Load history when menu opens
     useEffect(() => {
         if (isMenuOpen) {
-            fetch('/api/history')
+            fetch('/api/history?limit=20')
                 .then(res => res.json())
-                .then(data => {
-                    if (data.history) setHistory(data.history);
+                .then((payload: ApiResponse<{ history: HistoryItem[] }>) => {
+                    if (payload.success && payload.data.history) {
+                        setHistory(payload.data.history);
+                    }
                 })
                 .catch(err => console.error('Failed to load history', err));
         }
@@ -215,12 +249,14 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
             });
 
 
-            const data = await response.json();
+            const payload = await response.json() as ApiResponse<ChatPostResponseData>;
 
-            if (!data.success) {
-                console.error('Chat API Error Details:', data.details);
-                throw new Error(data.error || 'Failed to get response');
+            if (!payload.success) {
+                console.error('Chat API Error Details:', payload.details);
+                throw new Error(payload.error || 'Failed to get response');
             }
+
+            const data = payload.data;
 
             // Update Chat ID if new session started
             if (data.chatId && data.chatId !== currentChatId) {
@@ -254,15 +290,16 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
             if (data.sources && onSourcesChange) onSourcesChange(data.sources);
 
 
-        } catch (error: any) {
-            if (error.name === 'AbortError') {
+        } catch (error: unknown) {
+            const isAbortError = error instanceof Error && error.name === 'AbortError';
+
+            if (isAbortError) {
                 console.log('Chat request aborted');
                 setMessages(prev => {
                     const newMessages = [...prev];
-                    const lastMsg = newMessages[newMessages.length - 1];
-                    if (lastMsg && lastMsg.isLoading) {
-                        newMessages.pop(); // Remove loading state
-                        newMessages.push({
+                    const lastIdx = newMessages.findIndex((m) => m.isLoading);
+                    if (lastIdx !== -1) {
+                        newMessages.splice(lastIdx, 1, {
                             id: `stop-${Date.now()}`,
                             content: 'Generování bylo zastaveno.',
                             isUser: false,
@@ -272,12 +309,13 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                 });
             } else {
                 console.error('Chat error:', error);
+                const errorMessage = error instanceof Error ? error.message : 'Neznámá chyba';
                 setMessages(prev => {
                     const newMessages = [...prev];
                     newMessages.pop(); // Remove loading
                     newMessages.push({
                         id: `error-${Date.now()}`,
-                        content: `Došlo k chybě: ${error.message || 'Neznámá chyba'}`,
+                        content: `Došlo k chybě: ${errorMessage}`,
                         isUser: false,
                     });
                     return newMessages;
@@ -371,6 +409,9 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                         <button
                             onClick={() => setIsMenuOpen(!isMenuOpen)}
                             className="liquid-glass w-12 h-12 rounded-full flex items-center justify-center active:scale-95 transition-all text-[var(--c-content)] hover:text-[var(--c-action)] group relative z-50"
+                            aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+                            aria-expanded={isMenuOpen}
+                            aria-haspopup="true"
                         >
                             <div className="flex flex-col gap-1.5 items-center justify-center w-5 transition-transform duration-200 group-hover:scale-110">
                                 <div className={`w-full h-0.5 bg-current rounded-full transition-transform duration-300 ${isMenuOpen ? "rotate-45 translate-y-2" : ""}`} />
@@ -448,11 +489,14 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                                         onClick={async () => {
                                             if (!confirm('Opravdu chcete smazat celou historii chatu?')) return;
                                             try {
-                                                await fetch('/api/history', { method: 'DELETE' });
-                                                setHistory([]);
-                                                setMessages([]);
-                                                setChatId(null);
-                                                setIsMenuOpen(false);
+                                                const res = await fetch('/api/history', { method: 'DELETE' });
+                                                const payload = await res.json() as ApiResponse<{ cleared: boolean }>;
+                                                if (payload.success) {
+                                                    setHistory([]);
+                                                    setMessages([]);
+                                                    setChatId(null);
+                                                    setIsMenuOpen(false);
+                                                }
                                             } catch (e) {
                                                 console.error('Failed to clear history', e);
                                             }
@@ -478,7 +522,11 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
 
                 {/* Chat Area */}
                 <div className="flex-1 overflow-y-auto pt-28 pb-32 px-4 md:px-12 lg:px-24" ref={scrollRef} >
-                    <div className="max-w-3xl mx-auto space-y-8">
+                    <div
+                        className="max-w-3xl mx-auto space-y-8"
+                        aria-live="polite"
+                        aria-relevant="additions"
+                    >
                         {messages.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-center opacity-50 space-y-4 pt-20">
                                 <FileText size={48} className="text-[var(--c-content)]" />

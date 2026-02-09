@@ -9,6 +9,7 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
   customType,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
@@ -109,6 +110,7 @@ export const documents = pgTable('documents', {
 }, (table) => [
   index('documents_user_idx').on(table.userId),
   index('documents_hash_idx').on(table.fileHash),
+  uniqueIndex('documents_user_hash_unique_idx').on(table.userId, table.fileHash),
 ]);
 
 // =============================================================================
@@ -289,6 +291,20 @@ export const chats = pgTable('chats', {
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 
+export interface MessageSource {
+  id?: string;
+  chunkId?: string;
+  documentId?: string;
+  pageNumber?: number | null;
+  title?: string | null;
+  filename?: string | null;
+  content?: string;
+  boundingBox?: BoundingBox | null;
+  parentHeader?: string | null;
+  relevanceScore?: number;
+  [key: string]: unknown;
+}
+
 export const messages = pgTable('messages', {
   id: uuid('id').primaryKey().defaultRandom(),
   chatId: uuid('chat_id').references(() => chats.id, { onDelete: 'cascade' }).notNull(),
@@ -297,7 +313,7 @@ export const messages = pgTable('messages', {
   content: text('content').notNull(),
 
   // Metadata for RAG
-  sources: jsonb('sources').$type<any[]>(), // Array of source objects used for this message
+  sources: jsonb('sources').$type<MessageSource[]>(), // Array of source objects used for this message
 
   // Timestamps
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

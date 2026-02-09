@@ -9,7 +9,7 @@
  * With semantic caching for instant retrieval of similar queries
  */
 
-import { hybridSearch, type SearchResult, type HybridSearchConfig, DEFAULT_SEARCH_CONFIG } from '@/lib/db/queries';
+import { hybridSearch, getChunkById, type SearchResult, type HybridSearchConfig, DEFAULT_SEARCH_CONFIG } from '@/lib/db/queries';
 import { rerankResults, type RerankedResult, DEFAULT_RERANKER_CONFIG } from './reranker';
 import { lookupCache, storeInCache, CACHE_CONFIG } from './cache';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
@@ -17,8 +17,8 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { generateText } from 'ai';
 import { db } from '@/lib/db';
 import { documents } from '@/lib/db/schema';
-import { count } from 'drizzle-orm';
 import type { Citation } from '@/lib/db/schema';
+import { logError } from '@/lib/logger';
 
 /**
  * Source chunk with citation ID
@@ -118,6 +118,37 @@ function buildContext(sources: SourceChunk[]): string {
     return sources
         .map(s => `[${s.citationId}] (${s.filename || 'Unknown'}, p.${s.pageNumber})\n${s.content}`)
         .join('\n\n---\n\n');
+}
+
+/**
+ * Rough token-safe truncation for context to avoid exceeding model limits.
+ * Assumes ~4 chars per token and targets ~6k tokens budget for context.
+ */
+const MAX_CONTEXT_CHARS = 24000;
+
+function buildTruncatedContext(sources: SourceChunk[]): string {
+    const parts: string[] = [];
+    let totalChars = 0;
+
+    for (const s of sources) {
+        const chunkText = `[${s.citationId}] (${s.filename || 'Unknown'}, p.${s.pageNumber})\n${s.content}`;
+        if (totalChars + chunkText.length > MAX_CONTEXT_CHARS) {
+            break;
+        }
+        parts.push(chunkText);
+        totalChars += chunkText.length;
+    }
+
+    return parts.join('\n\n---\n\n');
+}
+
+async function generateWithTimeout(args: Parameters<typeof generateText>[0], timeoutMs = 30000) {
+    return Promise.race([
+        generateText(args),
+        new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('LLM call timed out')), timeoutMs),
+        ),
+    ]);
 }
 
 /**
@@ -223,13 +254,13 @@ async function agentGenerator(
         };
     }
 
-    const context = buildContext(sources);
+    const context = buildTruncatedContext(sources);
 
     const google = createGoogleGenerativeAI({
         apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
     });
 
-    const result = await generateText({
+    const result = await generateWithTimeout({
         model: google(config.generatorModel),
         system: GENERATOR_SYSTEM_PROMPT,
         prompt: `ZDROJE:\n${context}\n\n---\n\nOTÁZKA: ${query}`,
@@ -293,12 +324,12 @@ async function agentAuditor(
 
     const context = buildContext(sources);
 
-    const anthropic = createAnthropic({
-        apiKey: process.env.ANTHROPIC_API_KEY,
-    });
-
     try {
-        const result = await generateText({
+        const anthropic = createAnthropic({
+            apiKey: process.env.ANTHROPIC_API_KEY,
+        });
+
+        const result = await generateWithTimeout({
             model: anthropic(config.auditorModel),
             system: AUDITOR_SYSTEM_PROMPT,
             prompt: `SOURCES:\n${context}\n\n---\n\nRESPONSE TO VERIFY:\n${response}`,
@@ -329,7 +360,7 @@ async function agentAuditor(
         };
 
     } catch (error) {
-        console.error('   ❌ Auditor error:', error);
+        logError('Auditor error', { route: 'rag', stage: 'auditor' }, error);
         return {
             verified: false,
             assessment: 'Verification failed',
@@ -375,17 +406,22 @@ export async function executeRAG(
         console.log(`   Total time: ${totalTimeMs.toFixed(0)}ms (saved ~2000ms)`);
         console.log(`${'='.repeat(60)}\n`);
 
-        // Build sources from cached chunk IDs (simplified for cache hit)
-        const sources: SourceChunk[] = cached.citations?.map((c, index) => ({
-            citationId: String(index + 1),
-            chunkId: c.chunkId,
-            documentId: '',
-            content: '',
-            pageNumber: c.page,
-            boundingBox: null,
-            parentHeader: null,
-            relevanceScore: c.confidence,
-        })) || [];
+        // Rehydrate sources from DB so citation click still has filename/page/bbox.
+        const cachedCitations = cached.citations || [];
+        const sources: SourceChunk[] = await Promise.all(cachedCitations.map(async (c, index) => {
+            const chunk = await getChunkById(c.chunkId);
+            return {
+                citationId: c.id || String(index + 1),
+                chunkId: c.chunkId,
+                documentId: chunk?.documentId || '',
+                content: chunk?.content || '',
+                pageNumber: chunk?.pageNumber || c.page,
+                boundingBox: chunk?.boundingBox || null,
+                parentHeader: chunk?.parentHeader || null,
+                filename: chunk?.filename,
+                relevanceScore: c.confidence,
+            };
+        }));
 
         return {
             response: cached.answerText,

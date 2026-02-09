@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import { createRequestId, logWarn } from '@/lib/logger';
 
 // =============================================================================
 // SECURITY HEADERS CONFIGURATION
@@ -63,12 +64,17 @@ const SECURITY_HEADERS: Record<string, string> = {
 };
 
 /**
- * Apply security headers to a response
+ * Apply security headers to a response and ensure a request ID is present
  */
 function applySecurityHeaders(response: NextResponse): NextResponse {
     for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
         response.headers.set(key, value);
     }
+
+    if (!response.headers.get('X-Request-ID')) {
+        response.headers.set('X-Request-ID', createRequestId());
+    }
+
     return response;
 }
 
@@ -176,7 +182,7 @@ function getClientIP(request: NextRequest): string {
 /**
  * Create "Liquid Glass" styled 429 response (with security headers)
  */
-function createRateLimitResponse(resetTime: number): NextResponse {
+function createRateLimitResponse(resetTime: number, limit: number): NextResponse {
     const retryAfterSeconds = Math.ceil((resetTime - Date.now()) / 1000);
 
     const response = NextResponse.json(
@@ -190,7 +196,7 @@ function createRateLimitResponse(resetTime: number): NextResponse {
             status: 429,
             headers: {
                 'Retry-After': String(retryAfterSeconds),
-                'X-RateLimit-Limit': String(RATE_LIMITS.chat.requests),
+                'X-RateLimit-Limit': String(limit),
                 'X-RateLimit-Reset': String(resetTime),
                 'Content-Type': 'application/json',
             },
@@ -249,7 +255,7 @@ export async function middleware(request: NextRequest) {
 
     // Skip rate limiting if Upstash is not configured (development mode)
     if (!isUpstashConfigured()) {
-        console.log('⚠️ Rate limiting disabled: UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN not configured');
+        logWarn('Rate limiting disabled: Upstash Redis not configured');
         const response = NextResponse.next();
         return applySecurityHeaders(response);
     }
@@ -264,8 +270,8 @@ export async function middleware(request: NextRequest) {
                 const { success, reset, remaining } = await limiter.limit(ip);
 
                 if (!success) {
-                    console.log(`🚫 Rate limit exceeded: /api/chat - IP: ${ip}`);
-                    return createRateLimitResponse(reset);
+                    logWarn('Rate limit exceeded on /api/chat', { route: '/api/chat', ip });
+                    return createRateLimitResponse(reset, RATE_LIMITS.chat.requests);
                 }
 
                 // Add rate limit headers to response
@@ -282,8 +288,8 @@ export async function middleware(request: NextRequest) {
                 const { success, reset, remaining } = await limiter.limit(ip);
 
                 if (!success) {
-                    console.log(`🚫 Rate limit exceeded: /api/ingest - IP: ${ip}`);
-                    return createRateLimitResponse(reset);
+                    logWarn('Rate limit exceeded on /api/ingest', { route: '/api/ingest', ip });
+                    return createRateLimitResponse(reset, RATE_LIMITS.ingest.requests);
                 }
 
                 const response = NextResponse.next();
@@ -295,7 +301,7 @@ export async function middleware(request: NextRequest) {
 
     } catch (error) {
         // If rate limiting fails, allow the request through (fail open)
-        console.error('❌ Rate limiting error:', error);
+        logWarn('Rate limiting error, failing open', { route: pathname }, error);
         const response = NextResponse.next();
         return applySecurityHeaders(response);
     }

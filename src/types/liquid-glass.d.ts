@@ -12,7 +12,12 @@ declare module '@tinymomentum/liquid-glass-react' {
         children?: ReactNode;
     }
 
+    export interface LiquidGlassLinkProps extends HTMLAttributes<HTMLAnchorElement> {
+        href?: string;
+        children?: ReactNode;
+    }
+
     export const LiquidGlassContainer: FC<LiquidGlassContainerProps>;
     export const LiquidGlassButton: FC<LiquidGlassButtonProps>;
-    export const LiquidGlassLink: FC<any>;
+    export const LiquidGlassLink: FC<LiquidGlassLinkProps>;
 }

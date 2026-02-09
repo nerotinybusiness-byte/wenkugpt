@@ -1,67 +1,73 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { chats, users } from '@/lib/db/schema';
-import { desc, eq } from 'drizzle-orm';
+import { chats } from '@/lib/db/schema';
+import { and, desc, eq, lt } from 'drizzle-orm';
+import { requireUser } from '@/lib/auth/request-auth';
+import { apiError, apiSuccess } from '@/lib/api/response';
 
 export async function GET(request: NextRequest) {
     try {
-        // Mock User Resolution (Single User Mode)
-        // In real app: const session = await auth(); const userId = session.user.id;
-        const allUsers = await db.select().from(users).limit(1);
+        const auth = await requireUser(request);
+        if (!auth.ok) return auth.response;
+        const userId = auth.user.id;
 
-        if (allUsers.length === 0) {
-            return new Response(JSON.stringify({ history: [] }), { status: 200 });
-        }
+        const { searchParams } = new URL(request.url);
+        const limitParam = searchParams.get('limit');
+        const cursor = searchParams.get('cursor');
+        const limit = Math.min(Math.max(Number(limitParam) || 20, 1), 100);
 
-        const userId = allUsers[0].id;
+        const whereClause = (() => {
+            if (!cursor) return eq(chats.userId, userId);
+            const cursorDate = new Date(cursor);
+            if (Number.isNaN(cursorDate.getTime())) return eq(chats.userId, userId);
+            return and(eq(chats.userId, userId), lt(chats.updatedAt, cursorDate));
+        })();
 
-        // Fetch chats for user, sorted by newest first
-        const userChats = await db
+        const query = db
             .select({
                 id: chats.id,
                 title: chats.title,
                 createdAt: chats.createdAt,
+                updatedAt: chats.updatedAt,
             })
             .from(chats)
-            .where(eq(chats.userId, userId))
-            .orderBy(desc(chats.updatedAt));
+            .where(whereClause)
+            .orderBy(desc(chats.updatedAt))
+            .limit(limit + 1);
 
-        return new Response(JSON.stringify({ history: userChats }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
+        const rows = await query;
+        const hasNextPage = rows.length > limit;
+        const items = hasNextPage ? rows.slice(0, limit) : rows;
+
+        return apiSuccess({
+            history: items.map((c) => ({
+                id: c.id,
+                title: c.title,
+                createdAt: c.createdAt,
+                updatedAt: c.updatedAt,
+            })),
+            nextCursor: hasNextPage ? items[items.length - 1].updatedAt : null,
         });
 
     } catch (error) {
         console.error('History API Error:', error);
-        return new Response(JSON.stringify({ error: 'Failed to fetch history' }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return apiError('HISTORY_FETCH_FAILED', 'Failed to fetch history', 500);
     }
 }
 
 export async function DELETE(request: NextRequest) {
     try {
-        // Mock User Resolution
-        const allUsers = await db.select().from(users).limit(1);
-        if (allUsers.length === 0) {
-            return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
-        }
-        const userId = allUsers[0].id;
+        const auth = await requireUser(request);
+        if (!auth.ok) return auth.response;
+        const userId = auth.user.id;
 
         // Delete all chats for this user
         await db.delete(chats).where(eq(chats.userId, userId));
 
-        return new Response(JSON.stringify({ success: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return apiSuccess({ cleared: true });
 
     } catch (error) {
         console.error('Clear History Error:', error);
-        return new Response(JSON.stringify({ error: 'Failed to clear history' }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return apiError('HISTORY_CLEAR_FAILED', 'Failed to clear history', 500);
     }
 }

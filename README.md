@@ -1,55 +1,60 @@
-# 📂 WenkuGPT
+# WenkuGPT
 
-**Advanced RAG (Retrieval-Augmented Generation) Platform for Documents.**
+Production-focused RAG application for document search and chat with citations.
 
-WenkuGPT is a professional document intelligence system built with Next.js, featuring a sophisticated "Liquid Glass" design and a robust verification pipeline.
+## Core Features
+- PDF/TXT ingestion pipeline (parse -> chunk -> embed -> store).
+- Hybrid retrieval (vector + full text) with reranking.
+- Chat with source citations and PDF deep-linking.
+- Semantic cache (Redis + Postgres vector fallback).
+- Admin-only document management APIs.
 
-## ✨ Key Features
-- **Semantic PDF Search**: Deep search through documents using hybrid vector/text retrieval.
-- **Sophisticated PDF Viewer**: Integrated viewer with precision-aligned highlights based on RAG citations.
-- **Auditor Loop**: Triple-agent verification system (Generator, Auditor, Verifier) to eliminate hallucinations.
-- **Liquid Glass UI**: Stunning 2026-era aesthetics with vibrant animations and micro-interactions.
-- **Hybrid Search Tuning**: Fine-tune the balance between semantic meaning and keyword precision.
+## Tech Stack
+- Next.js (App Router)
+- Supabase Postgres + pgvector
+- Drizzle ORM
+- Google Gemini + Anthropic + Cohere
+- Upstash Redis (cache and rate limit)
 
-## 🛠 Tech Stack
-- **Framework**: Next.js 14+ (App Router)
-- **Styling**: Tailwind CSS + Shadcn UI
-- **Database**: Supabase (PostgreSQL + pgvector)
-- **AI Models**: Google Gemini 2.0 & Claude 3.5
-- **Icons**: Lucide React
+## Environment
+Create `.env.local` based on `.env.example`.
 
-## 🚀 Getting Started
+Required keys:
+- `DATABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `GOOGLE_GENERATIVE_AI_API_KEY`
+- `ANTHROPIC_API_KEY` (optional if auditor disabled)
+- `COHERE_API_KEY` (optional; fallback ranking works without it)
+- `ADMIN_EMAILS` (comma-separated allowlist for admin-only document endpoints)
 
-### 1. Prerequisites
-- Node.js 18+
-- Supabase project (with pgvector enabled)
-- Google AI (Gemini) API Key
-- Anthropic (Claude) API Key (optional for Auditor Loop)
+## Local Auth Header (current stage)
+Until full OAuth session wiring is finished, API auth expects:
+- `x-user-email: user@example.com`
 
-### 2. Environment Setup
-Create a `.env.local` file with the following:
-```env
-NEXT_PUBLIC_SUPABASE_URL=your_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_key
-GOOGLE_AI_API_KEY=your_gemini_key
-ANTHROPIC_API_KEY=your_claude_key
-```
+Local development fallback is supported via:
+- `DEV_DEFAULT_USER_EMAIL`
+- `ALLOW_HEADERLESS_AUTH=true` (temporary preview/staging switch only)
 
-### 3. Installation
-```bash
-npm install
-```
+Only emails in `ADMIN_EMAILS` can access:
+- `POST /api/ingest`
+- `GET /api/documents`
+- `DELETE /api/documents/[id]`
+- `GET /api/documents/[id]/preview`
+- `GET /api/debug` (dev only)
 
-### 4. Database Migration
-```bash
-npx drizzle-kit push
-```
+## Scripts
+- `npm run dev`
+- `npm run build`
+- `npm run lint`
+- `npm run lint:scripts`
+- `npm run test:run`
+- `npx tsc --noEmit`
 
-### 5. Run Development Server
-```bash
-npm run dev
-```
+Helper/debug scripts are stored under `scripts/` and linted separately from the production app.
 
-## 📄 License
-MIT
+## Migrations
+- `npx drizzle-kit push`
+
+## API Contract
+- See `docs/api.md` for unified response envelope and auth rules.

@@ -1,20 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { chunks } from '@/lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
+import { requireAdmin } from '@/lib/auth/request-auth';
+import { apiError, apiSuccess } from '@/lib/api/response';
 
 export async function GET(
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
     try {
+        const auth = await requireAdmin(request);
+        if (!auth.ok) return auth.response;
+
         const { id } = await context.params;
 
         if (!id) {
-            return NextResponse.json(
-                { success: false, error: 'Document ID is required' },
-                { status: 400 }
-            );
+            return apiError('DOCUMENT_ID_REQUIRED', 'Document ID is required', 400);
         }
 
         // Fetch all chunks for the document, ordered by index
@@ -27,10 +29,7 @@ export async function GET(
             .orderBy(asc(chunks.chunkIndex));
 
         if (documentChunks.length === 0) {
-            return NextResponse.json(
-                { success: false, error: 'No content found for this document' },
-                { status: 404 }
-            );
+            return apiError('DOCUMENT_PREVIEW_NOT_FOUND', 'No content found for this document', 404);
         }
 
         // Combine chunks into a single text
@@ -39,16 +38,12 @@ export async function GET(
             .map(chunk => `[Page ${chunk.pageNumber}]\n${chunk.content}`)
             .join('\n\n-------------------\n\n');
 
-        return NextResponse.json({
-            success: true,
+        return apiSuccess({
             content: fullText
         });
 
     } catch (error) {
         console.error('Error fetching document preview:', error);
-        return NextResponse.json(
-            { success: false, error: 'Failed to fetch document preview' },
-            { status: 500 }
-        );
+        return apiError('DOCUMENT_PREVIEW_FAILED', 'Failed to fetch document preview', 500);
     }
 }

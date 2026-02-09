@@ -1,20 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { documents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { requireAdmin } from '@/lib/auth/request-auth';
+import { apiError, apiSuccess } from '@/lib/api/response';
 
 export async function DELETE(
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
     try {
+        const auth = await requireAdmin(request);
+        if (!auth.ok) return auth.response;
+
         const { id } = await context.params;
 
         if (!id) {
-            return NextResponse.json(
-                { success: false, error: 'Document ID is required' },
-                { status: 400 }
-            );
+            return apiError('DOCUMENT_ID_REQUIRED', 'Document ID is required', 400);
         }
 
         // Delete from database (cascade handles related chunks)
@@ -23,23 +25,16 @@ export async function DELETE(
             .returning({ id: documents.id });
 
         if (deleted.length === 0) {
-            return NextResponse.json(
-                { success: false, error: 'Document not found' },
-                { status: 404 }
-            );
+            return apiError('DOCUMENT_NOT_FOUND', 'Document not found', 404);
         }
 
-        return NextResponse.json({
-            success: true,
+        return apiSuccess({
             message: 'Document deleted successfully',
             id: deleted[0].id
         });
 
     } catch (error) {
         console.error('Error deleting document:', error);
-        return NextResponse.json(
-            { success: false, error: 'Failed to delete document' },
-            { status: 500 }
-        );
+        return apiError('DOCUMENT_DELETE_FAILED', 'Failed to delete document', 500);
     }
 }

@@ -52,7 +52,7 @@ export default function FilesPage() {
                             <div>
                                 <h2 className="text-lg font-medium mb-2">Upload Documents</h2>
                                 <p className="text-sm text-white/50">
-                                    Add PDF files to your knowledge base. They will be automatically parsed, chunked, and embedded for search.
+                                    Add PDF or TXT files to your knowledge base. They will be automatically parsed, chunked, and embedded for search.
                                 </p>
                             </div>
 

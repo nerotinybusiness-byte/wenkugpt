@@ -1,145 +1,145 @@
 /**
  * WENKUGPT - Ingest API Route
- * 
+ *
  * POST /api/ingest
  * Accepts PDF or TXT files and runs the full ingestion pipeline.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { processPipeline } from '@/lib/ingest/pipeline';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
+import { processPipeline } from '@/lib/ingest/pipeline';
+import { requireAdmin } from '@/lib/auth/request-auth';
+import { apiError, apiSuccess } from '@/lib/api/response';
 
-/**
- * Maximum file size: 50MB
- */
+export const runtime = 'nodejs';
+
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
-
-/**
- * Allowed MIME types
- */
 const ALLOWED_TYPES = ['application/pdf', 'text/plain'] as const;
 
-/**
- * Request validation schema
- */
 const IngestRequestSchema = z.object({
     accessLevel: z.enum(['public', 'private', 'team']).default('private'),
     skipEmbedding: z.boolean().default(false),
 });
 
-/**
- * Response type
- */
-interface IngestResponse {
-    success: boolean;
-    documentId?: string;
-    stats?: {
-        pageCount: number;
-        chunkCount: number;
-        totalTokens: number;
-        processingTimeMs: number;
-    };
-    error?: string;
+function sanitizeFilename(name: string): string {
+    return name
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-/**
- * POST handler for file ingestion
- */
-export async function POST(request: NextRequest): Promise<NextResponse<IngestResponse>> {
+function resolveMimeType(file: File): string {
+    if (file.type) return file.type;
+    const ext = file.name.toLowerCase().split('.').pop();
+    if (ext === 'pdf') return 'application/pdf';
+    if (ext === 'txt') return 'text/plain';
+    return 'application/octet-stream';
+}
+
+function parseIngestOptions(formData: FormData): { accessLevel: 'public' | 'private' | 'team'; skipEmbedding: boolean } {
+    const optionsRaw = formData.get('options');
+
+    if (typeof optionsRaw === 'string') {
+        try {
+            const parsed = JSON.parse(optionsRaw);
+            const validated = IngestRequestSchema.safeParse(parsed);
+            if (validated.success) return validated.data;
+        } catch {
+            // fallback below
+        }
+    }
+
+    // Backward compatibility with direct multipart fields
+    const legacyAccess = formData.get('accessLevel');
+    const legacySkip = formData.get('skipEmbedding');
+
+    const validated = IngestRequestSchema.safeParse({
+        accessLevel: typeof legacyAccess === 'string' ? legacyAccess : undefined,
+        skipEmbedding: typeof legacySkip === 'string' ? legacySkip === 'true' : undefined,
+    });
+
+    return validated.success ? validated.data : { accessLevel: 'private', skipEmbedding: false };
+}
+
+function mapIngestErrorMessage(error: unknown): string {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    const normalized = message.toLowerCase();
+
+    if (
+        normalized.includes('dommatrix') ||
+        normalized.includes('pdf runtime polyfill') ||
+        normalized.includes('@napi-rs/canvas')
+    ) {
+        return 'PDF parser runtime is not configured correctly (DOMMatrix/ImageData/Path2D). Deploy with @napi-rs/canvas and Node runtime.';
+    }
+
+    return message;
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
     try {
-        // Parse multipart form data
+        const auth = await requireAdmin(request);
+        if (!auth.ok) return auth.response;
+
         const formData = await request.formData();
         const file = formData.get('file');
-        const optionsRaw = formData.get('options');
 
-        // Validate file presence
         if (!file || !(file instanceof File)) {
-            return NextResponse.json(
-                { success: false, error: 'No file provided. Send a file with key "file".' },
-                { status: 400 }
+            return apiError(
+                'INGEST_FILE_REQUIRED',
+                'No file provided. Send a file with key "file".',
+                400
             );
         }
 
-        // Validate file size
         if (file.size > MAX_FILE_SIZE) {
-            return NextResponse.json(
-                { success: false, error: `File too large. Maximum size: ${MAX_FILE_SIZE / 1024 / 1024}MB` },
-                { status: 400 }
+            return apiError(
+                'INGEST_FILE_TOO_LARGE',
+                `File too large. Maximum size: ${MAX_FILE_SIZE / 1024 / 1024}MB`,
+                400
             );
         }
 
-        // Validate MIME type
-        const mimeType = file.type || 'application/octet-stream';
+        const mimeType = resolveMimeType(file);
         if (!ALLOWED_TYPES.includes(mimeType as typeof ALLOWED_TYPES[number])) {
-            return NextResponse.json(
-                { success: false, error: `Unsupported file type: ${mimeType}. Allowed: ${ALLOWED_TYPES.join(', ')}` },
-                { status: 400 }
+            return apiError(
+                'INGEST_UNSUPPORTED_TYPE',
+                `Unsupported file type: ${mimeType}. Allowed: ${ALLOWED_TYPES.join(', ')}`,
+                400
             );
         }
 
-        // Parse options
-        let options: { accessLevel: 'public' | 'private' | 'team'; skipEmbedding: boolean } = {
-            accessLevel: 'private',
-            skipEmbedding: false
-        };
-        if (optionsRaw && typeof optionsRaw === 'string') {
-            try {
-                const parsed = JSON.parse(optionsRaw);
-                const validated = IngestRequestSchema.safeParse(parsed);
-                if (validated.success) {
-                    options = validated.data;
-                }
-            } catch {
-                // Use defaults if parsing fails
-            }
-        }
-
-        // Get file buffer
+        const options = parseIngestOptions(formData);
         const buffer = Buffer.from(await file.arrayBuffer());
 
-        // Sanitize filename to avoid URL encoding issues with diacritics
-        // e.g. "Manuál" -> "Manual"
-        const sanitizeFilename = (name: string) => {
-            return name
-                .normalize('NFD')
-                .replace(/[\u0300-\u036f]/g, '') // Remove accents
-                .replace(/[^a-zA-Z0-9._-]/g, '_'); // Replace special chars with underscore
-        };
-
         const safeFilename = sanitizeFilename(file.name);
+        const storageFilename = `${auth.user.id}_${randomUUID()}_${safeFilename}`;
 
-        // Upload file to Supabase Storage (Bucket: 'documents')
         const { supabase } = await import('@/lib/supabase');
-
-        console.log(`\n☁️ Uploading ${safeFilename} to Supabase Storage...`);
 
         const { error: uploadError } = await supabase.storage
             .from('documents')
-            .upload(safeFilename, buffer, {
+            .upload(storageFilename, buffer, {
                 contentType: mimeType,
-                upsert: true
+                upsert: false,
             });
 
         if (uploadError) {
-            console.error('❌ Failed to upload to Supabase Storage:', uploadError);
-            return NextResponse.json(
-                { success: false, error: `Storage Upload Failed: ${uploadError.message}. Make sure 'documents' bucket exists and is public.` },
-                { status: 500 }
+            return apiError(
+                'INGEST_STORAGE_UPLOAD_FAILED',
+                `Storage Upload Failed: ${uploadError.message}`,
+                500
             );
         }
 
-        console.log(`\n✅ Upload successful`);
-
-        // Run the ingestion pipeline (USE SAFE FILENAME for consistency)
-        console.log(`\n🚀 API: Starting ingestion for ${safeFilename} (orig: ${safeFilename})`);
-
-        const result = await processPipeline(buffer, mimeType, safeFilename, {
+        const result = await processPipeline(buffer, mimeType, storageFilename, {
+            userId: auth.user.id,
             accessLevel: options.accessLevel,
             skipEmbedding: options.skipEmbedding,
         });
 
-        return NextResponse.json({
-            success: true,
+        return apiSuccess({
             documentId: result.documentId,
             stats: {
                 pageCount: result.stats.pageCount,
@@ -148,24 +148,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<IngestRes
                 processingTimeMs: Math.round(result.stats.totalTimeMs),
             },
         });
-
     } catch (error) {
-        console.error('❌ Ingest API error:', error);
-
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-
-        return NextResponse.json(
-            { success: false, error: errorMessage },
-            { status: 500 }
-        );
+        console.error('Ingest API error:', error);
+        return apiError('INGEST_FAILED', mapIngestErrorMessage(error), 500);
     }
 }
 
-/**
- * GET handler - return API info
- */
 export async function GET(): Promise<NextResponse> {
-    return NextResponse.json({
+    return apiSuccess({
         name: 'WENKUGPT Ingest API',
         version: '1.0.0',
         endpoints: {

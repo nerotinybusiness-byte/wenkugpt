@@ -17,6 +17,22 @@ interface FileListProps {
     refreshTrigger?: number;
 }
 
+interface ApiSuccess<T> {
+    success: true;
+    data: T;
+    error: null;
+    code: null;
+}
+
+interface ApiError {
+    success: false;
+    data: null;
+    error: string;
+    code: string;
+}
+
+type ApiResponse<T> = ApiSuccess<T> | ApiError;
+
 export default function FileList({ refreshTrigger = 0 }: FileListProps) {
     const [documents, setDocuments] = useState<Document[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -32,9 +48,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
     const fetchDocuments = async () => {
         try {
             const response = await fetch('/api/documents', { cache: 'no-store' });
-            const data = await response.json();
-            if (data.success) {
-                setDocuments(data.documents);
+            const payload = await response.json() as ApiResponse<{ documents: Document[] }>;
+            if (payload.success) {
+                setDocuments(payload.data.documents);
             }
         } catch (error) {
             console.error('Failed to fetch documents:', error);
@@ -99,15 +115,28 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
         setDeletingIds(newDeletingIds);
 
         try {
-            await Promise.all(ids.map(id => fetch(`/api/documents/${id}`, { method: 'DELETE' })));
+            const deletionResults = await Promise.all(
+                ids.map(async (id) => {
+                    const response = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
+                    const payload = await response.json() as ApiResponse<{ id: string }>;
+                    return { id, ok: payload.success };
+                })
+            );
+
+            const failed = deletionResults.filter((r) => !r.ok).map((r) => r.id);
+            const succeeded = deletionResults.filter((r) => r.ok).map((r) => r.id);
 
             // Remove from local state
-            setDocuments(prev => prev.filter(doc => !ids.includes(doc.id)));
+            setDocuments(prev => prev.filter(doc => !succeeded.includes(doc.id)));
             setSelectedIds(prev => {
                 const next = new Set(prev);
-                ids.forEach(id => next.delete(id));
+                succeeded.forEach(id => next.delete(id));
                 return next;
             });
+
+            if (failed.length > 0) {
+                alert(`Failed to delete ${failed.length} document(s).`);
+            }
         } catch (error) {
             console.error('Error deleting documents:', error);
             alert('Error deleting some documents');
@@ -128,14 +157,14 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
 
         try {
             const response = await fetch(`/api/documents/${doc.id}/preview`);
-            const data = await response.json();
+            const payload = await response.json() as ApiResponse<{ content: string }>;
 
-            if (data.success) {
-                setPreviewContent(data.content);
+            if (payload.success) {
+                setPreviewContent(payload.data.content);
             } else {
-                setPreviewContent(`Error: ${data.error || 'Failed to load content'}`);
+                setPreviewContent(`Error: ${payload.error || 'Failed to load content'}`);
             }
-        } catch (error) {
+        } catch {
             setPreviewContent('Error loading preview. Please try again.');
         } finally {
             setLoadingPreview(false);

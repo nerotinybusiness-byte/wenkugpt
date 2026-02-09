@@ -40,19 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# WENKUGPT debug and temp files
-debug_*.ts
-debug_*.js
-check_*.ts
-check_*.js
-check_*.txt
-test_*.ts
-test_*.js
-verify_*.ts
-repair_*.ts
-manual_migrate.ts
-seed_user.ts
-reproduce_*.ts
+# WENKUGPT local artifacts
 *.log
 *.log*
 *_output.txt
@@ -65,3 +53,7 @@ repair_log.txt
 connection_test.log
 test.pdf
 test_citation_css.html
+scripts/**/*.log
+scripts/**/*.txt
+scripts/**/*.json
+scripts/**/*.html

@@ -9,6 +9,10 @@ import { embedTexts, isEmbedderConfigured, DEFAULT_EMBEDDER_CONFIG } from './emb
 import { logResidencyStatus } from '@/lib/config/regions';
 import CryptoJS from 'crypto-js';
 import fs from 'fs/promises';
+import { db } from '@/lib/db';
+import { documents, chunks as chunksTable } from '@/lib/db/schema';
+import { eq, and, sql } from 'drizzle-orm';
+import { logError } from '@/lib/logger';
 
 /**
  * Pipeline processing result
@@ -46,11 +50,6 @@ function sha256(content: string | Buffer | Uint8Array): string {
 }
 
 /**
- * Temporary user ID until Google SSO is implemented
- */
-const TEMP_USER_ID = '00000000-0000-0000-0000-000000000001';
-
-/**
  * Process a document through the full ingestion pipeline
  * 
  * @param buffer - File content as Buffer or Uint8Array
@@ -71,8 +70,12 @@ export async function processPipeline(
     } = {}
 ): Promise<PipelineResult> {
     const startTime = performance.now();
-    const userId = options.userId || TEMP_USER_ID;
+    const userId = options.userId;
     const accessLevel = options.accessLevel || 'private';
+
+    if (!options.skipStorage && !userId) {
+        throw new Error('userId is required when skipStorage is false.');
+    }
 
     console.log(`\n${'='.repeat(60)}`);
     console.log(`📄 WENKUGPT Ingestion Pipeline`);
@@ -154,70 +157,72 @@ export async function processPipeline(
         documentId = 'skipped';
     } else {
         try {
-            // Late load DB and schema after env vars are ready
-            const { db } = await import('@/lib/db');
-            const { documents, chunks: chunksTable } = await import('@/lib/db/schema');
-            const { eq, sql } = await import('drizzle-orm');
-
-            // Create document record
+            // Create document record inside a transaction to avoid partial ingest
             const fileHash = sha256(buffer);
 
-            const [doc] = await db.insert(documents).values({
-                userId,
-                filename,
-                fileHash,
-                mimeType,
-                fileSize: buffer.length,
-                pageCount: document.pageCount,
-                accessLevel,
-                processingStatus: 'processing',
-            }).returning();
+            await db.transaction(async (tx) => {
+                const existingDoc = await tx
+                    .select({ id: documents.id })
+                    .from(documents)
+                    .where(and(eq(documents.userId, userId!), eq(documents.fileHash, fileHash)))
+                    .limit(1);
 
-            documentId = doc.id;
-            console.log(`   ✓ Created document: ${documentId}`);
+                if (existingDoc.length > 0) {
+                    documentId = existingDoc[0].id;
+                    console.log(`   Duplicate file detected, reusing document: ${documentId}`);
+                    return;
+                }
 
-            // Prepare chunk records
-            const chunkRecords = chunks.map((chunk, index) => ({
-                documentId: doc.id,
-                content: chunk.text,
-                contentHash: sha256(chunk.text),
-                embedding: chunkEmbeddings[index],
-                pageNumber: chunk.page,
-                boundingBox: chunk.bbox,
-                parentHeader: chunk.parentHeader || null,
-                chunkIndex: index,
-                tokenCount: chunk.tokenCount,
-                accessLevel,
-                // Generate simple full-text search vector (Czech dict not available)
-                ftsVector: sql`to_tsvector('simple', ${chunk.text})`,
-            }));
+                const [doc] = await tx.insert(documents).values({
+                    userId: userId!,
+                    filename,
+                    fileHash,
+                    mimeType,
+                    fileSize: buffer.length,
+                    pageCount: document.pageCount,
+                    accessLevel,
+                    processingStatus: 'processing',
+                }).returning();
 
-            // Batch insert chunks (100 at a time for Supabase)
-            const BATCH_SIZE = 100;
-            for (let i = 0; i < chunkRecords.length; i += BATCH_SIZE) {
-                const batch = chunkRecords.slice(i, i + BATCH_SIZE);
-                await db.insert(chunksTable).values(batch);
-                console.log(`   ✓ Inserted chunk batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunkRecords.length / BATCH_SIZE)}`);
-            }
+                documentId = doc.id;
+                console.log(`   ✓ Created document: ${documentId}`);
 
-            // Update document status to completed
-            await db.update(documents)
-                .set({
-                    processingStatus: 'completed',
-                    updatedAt: new Date(),
-                })
-                .where(eq(documents.id, doc.id));
+                // Prepare chunk records
+                const chunkRecords = chunks.map((chunk, index) => ({
+                    documentId: doc.id,
+                    content: chunk.text,
+                    contentHash: sha256(chunk.text),
+                    embedding: chunkEmbeddings[index],
+                    pageNumber: chunk.page,
+                    boundingBox: chunk.bbox,
+                    parentHeader: chunk.parentHeader || null,
+                    chunkIndex: index,
+                    tokenCount: chunk.tokenCount,
+                    accessLevel,
+                    // Generate simple full-text search vector (Czech dict not available)
+                    ftsVector: sql`to_tsvector('simple', ${chunk.text})`,
+                }));
 
-            console.log(`   ✓ Document status: completed`);
+                // Batch insert chunks (100 at a time for Supabase)
+                const BATCH_SIZE = 100;
+                for (let i = 0; i < chunkRecords.length; i += BATCH_SIZE) {
+                    const batch = chunkRecords.slice(i, i + BATCH_SIZE);
+                    await tx.insert(chunksTable).values(batch);
+                    console.log(`   ✓ Inserted chunk batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunkRecords.length / BATCH_SIZE)}`);
+                }
+
+                // Update document status to completed
+                await tx.update(documents)
+                    .set({
+                        processingStatus: 'completed',
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(documents.id, doc.id));
+
+                console.log(`   ✓ Document status: completed`);
+            });
         } catch (error) {
-            console.error('   ❌ Storage error:', error);
-
-            // Log to file for debugging
-            const fs = await import('fs/promises');
-            const timestamp = new Date().toISOString();
-            const errorLog = `\n[${timestamp}] PIPELINE ERROR: ${error instanceof Error ? error.stack : String(error)}\n`;
-            await fs.appendFile('pipeline-error.log', errorLog);
-
+            logError('Storage error in ingestion pipeline', { filename, mimeType }, error);
             throw error;
         }
     }

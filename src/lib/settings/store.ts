@@ -94,6 +94,10 @@ const DEFAULT_SETTINGS = {
     lastStats: null,
 };
 
+function isPersistedSettingsState(value: unknown): value is Partial<SettingsState> {
+    return typeof value === 'object' && value !== null;
+}
+
 /**
  * Settings store with persistence
  */
@@ -124,12 +128,15 @@ export const useSettings = create<SettingsState>()(
         {
             name: 'wenkugpt-settings',
             version: 2,
-            migrate: (persistedState: any, version: number) => {
+            migrate: (persistedState: unknown, version: number) => {
                 if (version === 1) {
                     // Reset to defaults on version bump to ensure clean model selection
                     return DEFAULT_SETTINGS;
                 }
-                return persistedState as SettingsState;
+                if (!isPersistedSettingsState(persistedState)) {
+                    return DEFAULT_SETTINGS;
+                }
+                return { ...DEFAULT_SETTINGS, ...persistedState };
             },
         }
     )

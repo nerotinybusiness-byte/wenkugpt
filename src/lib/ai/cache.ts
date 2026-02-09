@@ -81,6 +81,10 @@ function getRedis(): Redis | null {
     return redis;
 }
 
+function toRows<T>(result: T[] | { rows: T[] }): T[] {
+    return Array.isArray(result) ? result : result.rows;
+}
+
 /**
  * Look up cached response by semantic similarity
  * 
@@ -190,8 +194,10 @@ export async function lookupCache(query: string): Promise<CachedResponse | null>
             LIMIT 1
         `);
 
-        if (semanticMatches.length > 0) {
-            const match = semanticMatches[0];
+        const semanticRows = toRows(semanticMatches);
+
+        if (semanticRows.length > 0) {
+            const match = semanticRows[0];
 
             if (match.similarity >= CACHE_CONFIG.SIMILARITY_THRESHOLD) {
                 await incrementHitCount(match.id);
@@ -343,7 +349,8 @@ export async function clearExpiredCache(): Promise<number> {
     RETURNING id
   `);
 
-    const count = result.length;
+    const rows = toRows(result);
+    const count = rows.length;
     if (count > 0) {
         console.log(`🧹 Cache: Cleared ${count} expired entries`);
     }
@@ -372,7 +379,8 @@ export async function getCacheStats(): Promise<{
     WHERE expires_at > NOW()
   `);
 
-    const row = stats[0] || { total_entries: '0', total_hits: '0', avg_confidence: '0' };
+    const rows = toRows(stats);
+    const row = rows[0] || { total_entries: '0', total_hits: '0', avg_confidence: '0' };
 
     return {
         totalEntries: parseInt(row.total_entries, 10),

@@ -7,6 +7,25 @@
 
 import { GoogleGenerativeAI, TaskType } from '@google/generative-ai';
 
+interface EmbedContentRequestCompat {
+    content: {
+        parts: Array<{ text: string }>;
+        role: 'user';
+    };
+    taskType: TaskType;
+    outputDimensionality: number;
+}
+
+interface EmbedContentResponseCompat {
+    embedding?: {
+        values?: number[];
+    };
+}
+
+interface EmbeddingModelCompat {
+    embedContent(request: EmbedContentRequestCompat): Promise<EmbedContentResponseCompat>;
+}
+
 /**
  * Configuration for the embedder
  */
@@ -21,8 +40,8 @@ export interface EmbedderConfig {
  * Default embedder configuration
  */
 export const DEFAULT_EMBEDDER_CONFIG: EmbedderConfig = {
-    batchSize: 1,
-    batchDelayMs: 1000,
+    batchSize: 16,
+    batchDelayMs: 250,
 };
 
 /**
@@ -92,6 +111,7 @@ export async function embedTexts(
     const startTime = performance.now();
     const genAI = new GoogleGenerativeAI(getApiKey());
     const model = genAI.getGenerativeModel({ model: 'models/gemini-embedding-001' });
+    const embeddingModel = model as unknown as EmbeddingModelCompat;
 
     const embeddings: EmbeddingResult[] = [];
     let totalTokens = 0;
@@ -109,16 +129,20 @@ export async function embedTexts(
         const batchResults = await Promise.all(
             batch.map(async (text, batchIdx) => {
                 try {
-                    // @ts-ignore
-                    const result = await model.embedContent({
+                    const result = await embeddingModel.embedContent({
                         content: { parts: [{ text }], role: 'user' },
                         taskType: TaskType.RETRIEVAL_DOCUMENT,
                         outputDimensionality: 768,
-                    } as any);
+                    });
+
+                    const values = result.embedding?.values;
+                    if (!values || values.length === 0) {
+                        throw new Error('Embedding response missing vector values');
+                    }
 
                     return {
                         text,
-                        embedding: result.embedding.values,
+                        embedding: values,
                         index: batchIndices[batchIdx],
                     };
                 } catch (error) {
