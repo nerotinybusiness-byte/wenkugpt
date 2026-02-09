@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { FileText, Trash2, CheckCircle, Loader2, AlertCircle, Eye, X, CheckSquare, Square, RefreshCw, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { apiFetch } from '@/lib/api/client-request';
 
 interface Document {
     id: string;
@@ -33,6 +34,13 @@ interface ApiError {
 
 type ApiResponse<T> = ApiSuccess<T> | ApiError;
 
+const STORAGE_KEY_PREFIX_REGEX = /^[0-9a-f-]{36}_[0-9a-f-]{36}_(.+)$/i;
+
+function toDisplayFilename(filename: string): string {
+    const match = STORAGE_KEY_PREFIX_REGEX.exec(filename);
+    return match?.[1] ?? filename;
+}
+
 export default function FileList({ refreshTrigger = 0 }: FileListProps) {
     const [documents, setDocuments] = useState<Document[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -47,7 +55,7 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
 
     const fetchDocuments = async () => {
         try {
-            const response = await fetch('/api/documents', { cache: 'no-store' });
+            const response = await apiFetch('/api/documents', { cache: 'no-store' });
             const payload = await response.json() as ApiResponse<{ documents: Document[] }>;
             if (payload.success) {
                 setDocuments(payload.data.documents);
@@ -85,9 +93,12 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
         }
     }, [documents]);
 
-    const filteredDocuments = documents.filter(doc =>
-        doc.filename.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredDocuments = documents.filter((doc) => {
+        const normalizedQuery = searchQuery.toLowerCase();
+        const displayFilename = toDisplayFilename(doc.filename).toLowerCase();
+        const rawFilename = doc.filename.toLowerCase();
+        return displayFilename.includes(normalizedQuery) || rawFilename.includes(normalizedQuery);
+    });
 
     const toggleSelect = (id: string) => {
         const newSelected = new Set(selectedIds);
@@ -117,7 +128,7 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
         try {
             const deletionResults = await Promise.all(
                 ids.map(async (id) => {
-                    const response = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
+                    const response = await apiFetch(`/api/documents/${id}`, { method: 'DELETE' });
                     const payload = await response.json() as ApiResponse<{ id: string }>;
                     return { id, ok: payload.success };
                 })
@@ -151,12 +162,12 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
     };
 
     const openPreview = async (doc: Document) => {
-        setPreviewDoc({ id: doc.id, filename: doc.filename });
+        setPreviewDoc({ id: doc.id, filename: toDisplayFilename(doc.filename) });
         setLoadingPreview(true);
         setPreviewContent('');
 
         try {
-            const response = await fetch(`/api/documents/${doc.id}/preview`);
+            const response = await apiFetch(`/api/documents/${doc.id}/preview`);
             const payload = await response.json() as ApiResponse<{ content: string }>;
 
             if (payload.success) {
@@ -299,7 +310,7 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                                         }`} />
                                 </div>
                                 <div className="min-w-0">
-                                    <p className="text-sm font-medium truncate text-white/90">{doc.filename}</p>
+                                    <p className="text-sm font-medium truncate text-white/90">{toDisplayFilename(doc.filename)}</p>
                                     <div className="flex gap-3 text-xs text-white/40">
                                         <span>{formatBytes(doc.fileSize)}</span>
                                         <span>•</span>

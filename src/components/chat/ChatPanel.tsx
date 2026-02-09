@@ -19,6 +19,7 @@ import type { CitationPayload } from './CitationLink';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import { SettingsDialog } from './SettingsDialog';
 import dynamic from 'next/dynamic';
+import { apiFetch } from '@/lib/api/client-request';
 
 const PDFViewer = dynamic(() => import('./PDFViewer'), {
     ssr: false,
@@ -166,7 +167,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
         setIsLoading(true);
 
         try {
-            const res = await fetch(`/api/chat?chatId=${id}`);
+            const res = await apiFetch(`/api/chat?chatId=${id}`);
             const payload = await res.json() as ApiResponse<{ messages: ChatApiMessage[] }>;
 
             if (payload.success && payload.data.messages) {
@@ -208,7 +209,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
     // Load history when menu opens
     useEffect(() => {
         if (isMenuOpen) {
-            fetch('/api/history?limit=20')
+            apiFetch('/api/history?limit=20')
                 .then(res => res.json())
                 .then((payload: ApiResponse<{ history: HistoryItem[] }>) => {
                     if (payload.success && payload.data.history) {
@@ -238,7 +239,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                 confidenceThreshold: settings.confidenceThreshold,
             };
 
-            const response = await fetch('/api/chat', {
+            const response = await apiFetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -490,7 +491,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                                         onClick={async () => {
                                             if (!confirm('Opravdu chcete smazat celou historii chatu?')) return;
                                             try {
-                                                const res = await fetch('/api/history', { method: 'DELETE' });
+                                                const res = await apiFetch('/api/history', { method: 'DELETE' });
                                                 const payload = await res.json() as ApiResponse<{ cleared: boolean }>;
                                                 if (payload.success) {
                                                     setHistory([]);

@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { Upload, FileText, Loader2, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { apiFetch } from '@/lib/api/client-request';
 
 interface FileUploaderProps {
     onUploadComplete?: () => void;
@@ -40,6 +41,10 @@ function toUserFriendlyUploadMessage(rawMessage: string): string {
         normalized.includes('@napi-rs/canvas')
     ) {
         return 'PDF parser na serveru neni spravne nakonfigurovany (DOMMatrix). Nahraj TXT nebo to zkus po nasazeni opravy serveru.';
+    }
+
+    if (normalized.includes('x-user-email') || normalized.includes('missing client identity')) {
+        return 'Chybi identita uzivatele pro API. Nastav NEXT_PUBLIC_DEFAULT_USER_EMAIL nebo localStorage klic x-user-email.';
     }
 
     return rawMessage;
@@ -128,7 +133,7 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
         }));
 
         try {
-            const response = await fetch('/api/ingest', {
+            const response = await apiFetch('/api/ingest', {
                 method: 'POST',
                 body: formData,
             });

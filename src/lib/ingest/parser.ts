@@ -206,19 +206,6 @@ interface PDFParseModule {
     default?: Record<string, unknown>;
 }
 
-function createPdfWorkerBootstrapUrl(workerModuleUrl: string, canvasModuleUrl: string): string {
-    const bootstrap = [
-        `import * as canvasModule from ${JSON.stringify(canvasModuleUrl)};`,
-        'const canvas = canvasModule.default ?? canvasModule;',
-        'if (!globalThis.DOMMatrix && canvas.DOMMatrix) globalThis.DOMMatrix = canvas.DOMMatrix;',
-        'if (!globalThis.ImageData && canvas.ImageData) globalThis.ImageData = canvas.ImageData;',
-        'if (!globalThis.Path2D && canvas.Path2D) globalThis.Path2D = canvas.Path2D;',
-        `export { WorkerMessageHandler } from ${JSON.stringify(workerModuleUrl)};`,
-    ].join('\n');
-
-    return `data:text/javascript;base64,${Buffer.from(bootstrap, 'utf8').toString('base64')}`;
-}
-
 /**
  * Type guard to check if item is TextItem (has 'str' property)
  */
@@ -299,25 +286,15 @@ export async function parsePDF(buffer: Buffer | Uint8Array): Promise<ParsedDocum
         throw new Error('pdf-parse did not expose PDFParse class');
     }
 
-    // Configure worker for Node.js environment.
-    // Keep worker version aligned with installed pdfjs-dist to avoid API/worker mismatch.
-    // We bootstrap the worker with canvas polyfills in-worker to prevent DOMMatrix runtime errors.
+    // Configure fake worker for Node.js environment by preloading WorkerMessageHandler.
+    // This avoids runtime filesystem resolution of "./pdf.worker.mjs" in serverless bundles.
     if (typeof window === 'undefined') {
-        const { createRequire } = await import('module');
-        const path = await import('path');
-        const url = await import('url');
-
-        const require = createRequire(path.join(process.cwd(), 'package.json'));
+        const runtime = globalThis as Record<string, unknown>;
         try {
-            const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
-            const workerModuleUrl = url.pathToFileURL(workerPath).href;
-
-            try {
-                const canvasPath = require.resolve('@napi-rs/canvas');
-                const canvasModuleUrl = url.pathToFileURL(canvasPath).href;
-                PDFParse.setWorker(createPdfWorkerBootstrapUrl(workerModuleUrl, canvasModuleUrl));
-            } catch {
-                PDFParse.setWorker(workerModuleUrl);
+            if (!runtime.pdfjsWorker) {
+                // @ts-expect-error pdfjs-dist worker module has no exported type declarations.
+                const workerModule = await import('pdfjs-dist/legacy/build/pdf.worker.mjs');
+                runtime.pdfjsWorker = workerModule;
             }
         } catch {
             // Keep pdf-parse default worker configuration as fallback.
