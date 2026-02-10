@@ -55,6 +55,7 @@
 - [x] Read-only query `select highlight_text from public.chunks limit 1` succeeds.
 - [x] Production ingest smoke after hotfix returns success (no `INGEST_FAILED`).
 - [x] `npm run db:check-ingest-schema` passes in strict mode on deployment target.
+- [x] Post-deploy production ingest smoke returns success after hardening release.
 
 ## Ingest hardening checks
 - [ ] `POST /api/ingest` fails fast with `INGEST_SCHEMA_MISMATCH` when required column is missing.

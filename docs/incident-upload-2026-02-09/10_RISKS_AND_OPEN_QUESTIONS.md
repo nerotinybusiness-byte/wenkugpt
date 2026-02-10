@@ -37,7 +37,7 @@
 8. Migration drift between runtime code and production DB schema (opened 2026-02-10)
 - Risk: code writes newly introduced columns (e.g., `chunks.highlight_text`) before migration is applied on target DB, causing ingest runtime failures (`PG 42703`).
 - Mitigation: immediate DB hotfix + ingest schema preflight (`schema-health`) + strict schema check script in deployment runbook.
-- Status: in progress (service restored, guardrails rolling out).
+- Status: mitigated (service restored, guardrails deployed; continue monitoring).
 
 ## Open questions requiring decision
 1. What is canonical client-side identity source?

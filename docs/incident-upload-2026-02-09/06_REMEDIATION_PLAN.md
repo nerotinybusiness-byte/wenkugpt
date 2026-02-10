@@ -134,7 +134,7 @@ Output:
 - Wrong top-strip anchors degrade to explicit `bbox-fallback` instead of false precision.
 
 ## Phase 8 - Production schema alignment and ingest preflight hardening (2026-02-10)
-Status: In progress
+Status: Done
 
 Tasks:
 1. Restore service immediately:

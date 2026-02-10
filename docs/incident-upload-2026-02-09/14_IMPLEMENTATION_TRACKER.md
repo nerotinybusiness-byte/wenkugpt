@@ -77,4 +77,4 @@ Fix missing `x-user-email` propagation in browser API requests.
 7. `done` Wire preflight check into ingest route before pipeline processing.
 8. `done` Add explicit PG `42703` error mapping + `INGEST_SCHEMA_MISMATCH` response path.
 9. `done` Add strict guardrail script (`scripts/check_ingest_schema.ts`) + npm script.
-10. `in_progress` Production deploy + post-deploy ingest validation for hardening patch (local gates done).
+10. `done` Production deploy + post-deploy ingest validation for hardening patch.

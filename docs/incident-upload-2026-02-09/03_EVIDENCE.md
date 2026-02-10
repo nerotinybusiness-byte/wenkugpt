@@ -58,3 +58,6 @@ This reduces worker resolution issues in serverless runtime and was validated lo
   - `select highlight_text from public.chunks limit 1` succeeds.
 - Functional smoke after hotfix:
   - `POST https://wenkugpt-copy.vercel.app/api/ingest` with admin `x-user-email` returned `200` + `success: true` (no `INGEST_FAILED`).
+- Post-deploy smoke after hardening release (`5de6f53`):
+  - deployment `https://wenkugpt-copy-g1jaynxhr-nerotinys-projects.vercel.app` reached `Ready`.
+  - alias `https://wenkugpt-copy.vercel.app` ingest smoke returned `200` + `success: true`.

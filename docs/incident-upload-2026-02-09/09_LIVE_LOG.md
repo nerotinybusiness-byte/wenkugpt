@@ -149,7 +149,12 @@ Use this file as append-only progress log.
   - `npm run lint` passed.
   - `npm run test:run` passed (`50/50`).
   - `npm run build` passed.
-- Current status: restore confirmed and hardening code/tests complete; deploy + post-deploy ingest verification pending.
+- Deployment + post-deploy verification:
+  - committed and pushed hardening patch: `5de6f53`.
+  - production deployment: `https://wenkugpt-copy-g1jaynxhr-nerotinys-projects.vercel.app` (`Ready`).
+  - alias `https://wenkugpt-copy.vercel.app` updated.
+  - post-deploy ingest smoke (`POST /api/ingest` with admin header) returned `200` + `success: true`.
+- Current status: schema drift hotfix and ingest hardening are deployed and verified; monitor-only phase remains.
 ## Next log entry template
 - Date:
 - Change made:
