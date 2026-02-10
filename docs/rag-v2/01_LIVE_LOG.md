@@ -109,3 +109,29 @@ Append-only execution log for `RAG v2 (Slang-aware Context Graph Memory)`.
   - text-layer matching quality depends on PDF text extraction fidelity
 - Next action:
   - production smoke on problematic citation case (`kde je sklad wenku?`)
+
+- Change made:
+  - committed and deployed follow-up UI fixes:
+    - `fix(ui): clean close button border styling` (`072551b`)
+    - `fix(pdf-viewer): normalize title and tighten citation highlight` (`2ebd336`)
+  - deployed preview + production and validated deployment status (`Ready`).
+  - applied production DB patch for viewer metadata columns after migrate baseline conflict:
+    - `documents.original_filename`
+    - `chunks.highlight_boxes`
+- Deployment:
+  - preview: `https://wenkugpt-copy-ektirb5t3-nerotinys-projects.vercel.app`
+  - production: `https://wenkugpt-copy-fyz0zdwvv-nerotinys-projects.vercel.app`
+  - alias: `https://wenkugpt-copy.vercel.app`
+- Verification run:
+  - `npx tsc --noEmit --incremental false` passed
+  - `npm run lint` passed
+  - `npm run test:run` passed
+  - `npx vercel inspect wenkugpt-copy-fyz0zdwvv-nerotinys-projects.vercel.app` => `Ready`
+- Result:
+  - context-window handoff updated with commits, deploy links, and DB patch status
+- New risk or blocker:
+  - user-side visual validation on real problematic citation is still pending (possible PDF text-layer variance).
+- Next action:
+  - run manual production smoke with query `kde je sklad wenku?` and verify:
+    - filename normalization in PDF header
+    - highlight limited to address line (not page-wide overlay)

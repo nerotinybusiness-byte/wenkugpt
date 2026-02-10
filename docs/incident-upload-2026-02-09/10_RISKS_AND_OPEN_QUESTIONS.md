@@ -24,6 +24,11 @@
 - Mitigation: staged rollout with feature flags and server kill-switch (`RAG_V2_KILL_SWITCH`).
 - Status: in progress.
 
+6. PDF citation highlight precision on production (updated 2026-02-10)
+- Risk: some PDFs may still render coarse highlight if text-layer tokenization differs from citation context.
+- Mitigation: context-aware text-layer fallback implemented and deployed; keep legacy bbox fallback; verify with known problematic query/doc.
+- Status: pending final user smoke validation.
+
 ## Open questions requiring decision
 1. What is canonical client-side identity source?
 - Option A: `NEXT_PUBLIC_DEFAULT_USER_EMAIL` (simple, static)
@@ -35,6 +40,10 @@
 
 3. Should we add runtime warning banner when auth header is missing?
 - Could reduce support load by guiding operator immediately.
+
+4. Should we add explicit "highlight mode" badge in PDF viewer?
+- Option A: hide internals and keep current behavior
+- Option B: show when highlight is `bbox` vs `context-text` fallback for easier debugging
 
 ## Exit criteria for incident closure
 - Header propagation fixed and verified in browser.
