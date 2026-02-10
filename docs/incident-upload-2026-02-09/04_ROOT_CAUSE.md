@@ -43,3 +43,20 @@ Context highlight cache key did not include citation geometry signature, enablin
 3. Top lexical spans can come from header/top region.
 4. No spatial gate rejects this mismatch.
 5. UI reports `context-text` while highlight is visually misplaced.
+
+## Addendum - Ingest schema drift (`chunks.highlight_text`, 2026-02-10)
+### Primary cause
+Application runtime writes `chunks.highlight_text`, but production database schema did not include this column.
+
+### Secondary cause
+Migration drift process gap: migration file existed (`drizzle/0004_chunks_highlight_text.sql`) but was not applied to target DB.
+
+### Tertiary cause
+Ingest route had no explicit preflight schema compatibility check, so mismatch surfaced only as runtime insert failure.
+
+### Addendum causal chain
+1. Code deploy starts writing `highlight_text`.
+2. Production DB lacks `highlight_text` column.
+3. Chunk insert fails with PG `42703`.
+4. API returns generic `INGEST_FAILED`.
+5. Operators receive SQL payload noise before exact root cause is confirmed.

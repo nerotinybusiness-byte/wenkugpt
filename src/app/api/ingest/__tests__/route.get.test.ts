@@ -9,6 +9,10 @@ describe('GET /api/ingest smoke', () => {
     it('returns endpoint metadata in unified API envelope', async () => {
         vi.doMock('@/lib/ingest/pipeline', () => ({ processPipeline: vi.fn() }));
         vi.doMock('@/lib/auth/request-auth', () => ({ requireAdmin: vi.fn() }));
+        vi.doMock('@/lib/db/schema-health', () => ({
+            assertIngestSchemaHealth: vi.fn(),
+            isIngestSchemaHealthError: vi.fn(() => false),
+        }));
 
         const { GET } = await import('@/app/api/ingest/route');
         const response = await GET();

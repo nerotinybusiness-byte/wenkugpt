@@ -43,3 +43,18 @@ This reduces worker resolution issues in serverless runtime and was validated lo
 - `src/components/chat/PDFViewer.tsx` ranked spans by lexical overlap only and did not enforce a spatial consistency gate against coarse citation geometry.
 - `src/components/chat/PDFViewer.tsx` cached resolved highlights by page key, which could reuse an incorrect resolution for another citation on the same page.
 - DB inspection of problematic chunk/page showed coarse envelopes and long chunk content that starts near page header text, matching observed top-strip anchoring.
+
+## I) Ingest schema mismatch evidence (`highlight_text`, 2026-02-10)
+- Production ingest failed at chunk insert with SQL payload including `highlight_text`:
+  - `insert into "chunks" (..., "highlight_boxes", "highlight_text", ..., "fts_vector", ...)`
+- Confirmed database error code and message:
+  - `code: 42703`
+  - `message: column "highlight_text" does not exist`
+- Read-only schema inspection before fix showed `chunks` columns included `highlight_boxes` but not `highlight_text`.
+- Immediate production hotfix applied:
+  - `ALTER TABLE public.chunks ADD COLUMN IF NOT EXISTS highlight_text text;`
+- Post-hotfix verification:
+  - `information_schema.columns` confirms `highlight_text` exists.
+  - `select highlight_text from public.chunks limit 1` succeeds.
+- Functional smoke after hotfix:
+  - `POST https://wenkugpt-copy.vercel.app/api/ingest` with admin `x-user-email` returned `200` + `success: true` (no `INGEST_FAILED`).

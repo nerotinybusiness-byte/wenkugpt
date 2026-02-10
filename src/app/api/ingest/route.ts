@@ -12,6 +12,7 @@ import { processPipeline } from '@/lib/ingest/pipeline';
 import { requireAdmin } from '@/lib/auth/request-auth';
 import { apiError, apiSuccess } from '@/lib/api/response';
 import { getRequestId, logError } from '@/lib/logger';
+import { assertIngestSchemaHealth, isIngestSchemaHealthError } from '@/lib/db/schema-health';
 
 export const runtime = 'nodejs';
 
@@ -63,7 +64,28 @@ function parseIngestOptions(formData: FormData): { accessLevel: 'public' | 'priv
     return validated.success ? validated.data : { accessLevel: 'private', skipEmbedding: false };
 }
 
-function mapIngestErrorMessage(error: unknown): string {
+function isPgColumnError(error: unknown): error is { code: string; message: string } {
+    return (
+        typeof error === 'object' &&
+        error !== null &&
+        typeof (error as { code?: unknown }).code === 'string' &&
+        typeof (error as { message?: unknown }).message === 'string'
+    );
+}
+
+export function mapIngestErrorMessage(error: unknown): string {
+    if (isIngestSchemaHealthError(error)) {
+        return error.message;
+    }
+
+    if (isPgColumnError(error) && error.code === '42703') {
+        const normalizedPgMessage = error.message.toLowerCase();
+        if (normalizedPgMessage.includes('highlight_text')) {
+            return 'Database schema mismatch: missing column chunks.highlight_text. Apply migration drizzle/0004_chunks_highlight_text.sql (or run DB migrations) before ingest.';
+        }
+        return `Database schema mismatch: ${error.message}. Apply pending DB migrations before ingest.`;
+    }
+
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
     const normalized = message.toLowerCase();
 
@@ -114,6 +136,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const options = parseIngestOptions(formData);
         const buffer = Buffer.from(await file.arrayBuffer());
 
+        await assertIngestSchemaHealth();
+
         const safeFilename = sanitizeFilename(file.name);
         const storageFilename = `${auth.user.id}_${randomUUID()}_${safeFilename}`;
 
@@ -153,6 +177,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     } catch (error) {
         const requestId = getRequestId(request);
         logError('Ingest POST error', { route: '/api/ingest', requestId }, error);
+        if (isIngestSchemaHealthError(error)) {
+            return apiError('INGEST_SCHEMA_MISMATCH', mapIngestErrorMessage(error), 500);
+        }
         return apiError('INGEST_FAILED', mapIngestErrorMessage(error), 500);
     }
 }

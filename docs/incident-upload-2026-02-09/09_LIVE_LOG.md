@@ -129,6 +129,27 @@ Use this file as append-only progress log.
   - `npm run test:run` passed (`45/45`).
   - `npm run build` passed.
 - Current status: code and automated gates are green; remaining work is browser regression matrix on known problematic citation flow.
+- Incident follow-up started for ingest runtime failure (`chunks.highlight_text`):
+  - confirmed real DB error code `42703` with message `column "highlight_text" does not exist`.
+  - verified production `chunks` schema had `highlight_boxes` but missing `highlight_text`.
+- Production restore actions executed:
+  - applied SQL hotfix: `ALTER TABLE public.chunks ADD COLUMN IF NOT EXISTS highlight_text text;`
+  - verified column presence via `information_schema.columns`.
+  - verified read query: `select highlight_text from public.chunks limit 1` succeeds.
+  - production ingest smoke (`POST /api/ingest` with admin header) returned `200` + `success: true`.
+- Hardening implementation started:
+  - added ingest schema preflight module (`src/lib/db/schema-health.ts`) with 60s cache.
+  - wired preflight assertion into `src/app/api/ingest/route.ts` before storage/upload pipeline.
+  - improved error mapping for PG `42703` (`highlight_text`) and added dedicated response code path `INGEST_SCHEMA_MISMATCH`.
+  - added guardrail script `scripts/check_ingest_schema.ts` + npm command `db:check-ingest-schema`.
+  - added test coverage for schema health and ingest error mapping.
+- Validation after hardening implementation:
+  - `npm run db:check-ingest-schema` passed.
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run test:run` passed (`50/50`).
+  - `npm run build` passed.
+- Current status: restore confirmed and hardening code/tests complete; deploy + post-deploy ingest verification pending.
 ## Next log entry template
 - Date:
 - Change made:

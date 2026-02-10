@@ -66,3 +66,15 @@ Fix missing `x-user-email` propagation in browser API requests.
 9. `in_progress` Browser regression matrix on known problematic citation flow.
 10. `done` Run static gates (`tsc`, `lint`, `test:run`, `build`).
 11. `planned` Dual-read rollout verification in production and incident closure note.
+
+## DB schema alignment for ingest track (2026-02-10)
+1. `done` Confirm real production error (`PG 42703`, `column "highlight_text" does not exist`).
+2. `done` Confirm runtime insert path writes `chunks.highlight_text`.
+3. `done` Apply production SQL hotfix (`ALTER TABLE public.chunks ADD COLUMN IF NOT EXISTS highlight_text text`).
+4. `done` Verify column existence + read query success after hotfix.
+5. `done` Run production ingest smoke (`POST /api/ingest`) and confirm `success: true`.
+6. `done` Add schema preflight module (`src/lib/db/schema-health.ts`) with 60s cache.
+7. `done` Wire preflight check into ingest route before pipeline processing.
+8. `done` Add explicit PG `42703` error mapping + `INGEST_SCHEMA_MISMATCH` response path.
+9. `done` Add strict guardrail script (`scripts/check_ingest_schema.ts`) + npm script.
+10. `in_progress` Production deploy + post-deploy ingest validation for hardening patch (local gates done).

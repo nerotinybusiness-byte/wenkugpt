@@ -13,6 +13,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:introspect": "drizzle-kit introspect",
+    "db:check-ingest-schema": "npx tsx scripts/check_ingest_schema.ts --strict",
     "test": "vitest",
     "test:run": "vitest run"
   },

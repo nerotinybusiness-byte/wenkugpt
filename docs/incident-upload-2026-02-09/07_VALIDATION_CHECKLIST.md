@@ -50,6 +50,16 @@
 - [x] `GET /api/history?limit=1` with `x-user-email` returns success.
 - [x] `GET /api/history?limit=1` without header returns `AUTH_UNAUTHORIZED`.
 
+## DB schema-alignment checks (`highlight_text`, 2026-02-10)
+- [x] `public.chunks.highlight_text` exists in `information_schema.columns`.
+- [x] Read-only query `select highlight_text from public.chunks limit 1` succeeds.
+- [x] Production ingest smoke after hotfix returns success (no `INGEST_FAILED`).
+- [x] `npm run db:check-ingest-schema` passes in strict mode on deployment target.
+
+## Ingest hardening checks
+- [ ] `POST /api/ingest` fails fast with `INGEST_SCHEMA_MISMATCH` when required column is missing.
+- [ ] Error message explicitly points to missing migration for `chunks.highlight_text` on PG `42703`.
+
 ## Regression checks
 - [x] Existing parser tests still pass.
 - [x] No auth regressions on protected endpoints in automated local checks.

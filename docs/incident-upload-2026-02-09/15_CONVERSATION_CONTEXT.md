@@ -14,3 +14,8 @@ Purpose: compact record of user requests and responses that influence implementa
 1. Keep incident docs updated as work progresses.
 2. Finalize plan docs first, then implement fix.
 3. Validate and deploy, then close incident with evidence.
+
+## 2026-02-10
+- User requested robust, precise implementation plan for real ingest failure root cause (`chunks.highlight_text`) with explicit requirement to keep markdown structure.
+- Agreed scope: immediate production restore first, then runtime/schema hardening and guardrails.
+- Confirmed expectation: continue writing evidence/tracker/risk/checklist updates in `docs/incident-upload-2026-02-09/*`.

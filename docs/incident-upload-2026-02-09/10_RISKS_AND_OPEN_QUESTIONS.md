@@ -34,6 +34,11 @@
 - Mitigation: narrow context payloads, region-first resolver, spatial validation gate, key-based context cache with highlight signature, deterministic `bbox-fallback`.
 - Status: in progress.
 
+8. Migration drift between runtime code and production DB schema (opened 2026-02-10)
+- Risk: code writes newly introduced columns (e.g., `chunks.highlight_text`) before migration is applied on target DB, causing ingest runtime failures (`PG 42703`).
+- Mitigation: immediate DB hotfix + ingest schema preflight (`schema-health`) + strict schema check script in deployment runbook.
+- Status: in progress (service restored, guardrails rolling out).
+
 ## Open questions requiring decision
 1. What is canonical client-side identity source?
 - Option A: `NEXT_PUBLIC_DEFAULT_USER_EMAIL` (simple, static)
@@ -51,6 +56,9 @@
 
 5. What is the minimum acceptable spatial overlap threshold for `context-text` acceptance?
 - Proposed default: require spatial gate support of at least 2 spans and merged area >= `0.0008`.
+
+6. Should `db:check-ingest-schema` become a required predeploy gate for production?
+- Proposed default: yes for production path; optional in local dev.
 
 ## Exit criteria for incident closure
 - Header propagation fixed and verified in browser.

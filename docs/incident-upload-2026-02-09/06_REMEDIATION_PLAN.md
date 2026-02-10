@@ -132,3 +132,30 @@ Tasks:
 Output:
 - `context-text` is reported only for spatially valid anchors.
 - Wrong top-strip anchors degrade to explicit `bbox-fallback` instead of false precision.
+
+## Phase 8 - Production schema alignment and ingest preflight hardening (2026-02-10)
+Status: In progress
+
+Tasks:
+1. Restore service immediately:
+   - apply DB hotfix `ALTER TABLE public.chunks ADD COLUMN IF NOT EXISTS highlight_text text;`
+   - verify column exists + read query succeeds
+   - run production ingest smoke
+2. Add ingest schema preflight in runtime:
+   - implement `src/lib/db/schema-health.ts`
+   - check required `chunks` columns: `highlight_boxes`, `highlight_text`, `embedding`, `fts_vector`
+   - check required extension: `vector`
+   - cache preflight result for 60s
+3. Improve ingest error precision:
+   - map PG `42703` + `highlight_text` to explicit migration guidance
+   - add dedicated API error for schema mismatch (`INGEST_SCHEMA_MISMATCH`)
+4. Add operational guardrail:
+   - create `scripts/check_ingest_schema.ts` with `--strict` mode and non-zero exit on mismatch
+   - add `npm run db:check-ingest-schema` script
+5. Validation and rollout:
+   - run `npx tsc --noEmit --incremental false`, `npm run lint`, `npm run test:run`, `npm run build`
+   - verify production ingest after deploy
+
+Output:
+- No fresh ingest failures due to missing `chunks.highlight_text`.
+- Schema mismatch is detected early with operator-actionable message.
