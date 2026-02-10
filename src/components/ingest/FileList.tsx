@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { FileText, Trash2, CheckCircle, Loader2, AlertCircle, Eye, X, CheckSquare, Square, RefreshCw, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/lib/api/client-request';
+import { createPortal } from 'react-dom';
 
 interface Document {
     id: string;
@@ -199,6 +200,8 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
         return new Date(dateString).toLocaleDateString();
     };
 
+    const canUsePortal = typeof document !== 'undefined';
+
     if (isLoading) {
         return (
             <div className="flex justify-center p-8">
@@ -369,11 +372,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                 })}
             </div>
 
-            {/* Preview Modal Overlay */}
-            {previewDoc && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            {previewDoc && canUsePortal && createPortal(
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
                     <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-white/10 rounded-xl flex flex-col shadow-2xl">
-                        {/* Modal Header */}
                         <div className="flex items-center justify-between p-4 border-b border-white/10">
                             <h3 className="font-semibold text-lg flex items-center gap-2">
                                 <FileText className="w-5 h-5 text-emerald-500" />
@@ -387,7 +388,6 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                             </button>
                         </div>
 
-                        {/* Modal Content */}
                         <div className="flex-1 overflow-y-auto p-6 bg-white/5 font-mono text-sm leading-relaxed custom-scrollbar">
                             {loadingPreview ? (
                                 <div className="flex items-center justify-center h-full text-white/40 gap-3">
@@ -401,14 +401,14 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                             )}
                         </div>
 
-                        {/* Modal Footer */}
                         <div className="p-4 border-t border-white/10 flex justify-end">
                             <Button variant="secondary" onClick={closePreview}>
                                 Close Preview
                             </Button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

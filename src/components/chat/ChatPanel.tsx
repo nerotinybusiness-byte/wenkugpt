@@ -10,7 +10,6 @@
 // ... imports
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSettings, getSettings, type SettingsState } from '@/lib/settings/store';
-import Link from 'next/link';
 import { FileText, MessageSquarePlus, History, Trash2 } from 'lucide-react';
 
 import ChatMessage from './ChatMessage';
@@ -18,6 +17,7 @@ import ChatInput from './ChatInput';
 import type { CitationPayload } from './CitationLink';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import { SettingsDialog } from './SettingsDialog';
+import { ManageFilesDialog } from './ManageFilesDialog';
 import dynamic from 'next/dynamic';
 import { apiFetch } from '@/lib/api/client-request';
 
@@ -127,6 +127,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
     const [chatId, setChatId] = useState<string | null>(null);
 
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isManageFilesOpen, setIsManageFilesOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -500,12 +501,16 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                                     <span className="font-medium">New Chat</span>
                                 </button>
 
-                                <Link href="/files" onClick={() => setIsMenuOpen(false)}>
-                                    <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-[var(--c-glass)]/20 transition-colors text-[var(--c-content)] hover:text-[var(--c-action)] group active:scale-95">
-                                        <FileText size={20} className="transition-transform duration-200 group-hover:scale-110" />
-                                        <div className="text-sm font-medium">Manage Files</div>
-                                    </button>
-                                </Link>
+                                <button
+                                    onClick={() => {
+                                        setIsMenuOpen(false);
+                                        setIsManageFilesOpen(true);
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-[var(--c-glass)]/20 transition-colors text-[var(--c-content)] hover:text-[var(--c-action)] group active:scale-95"
+                                >
+                                    <FileText size={20} className="transition-transform duration-200 group-hover:scale-110" />
+                                    <div className="text-sm font-medium">Manage Files</div>
+                                </button>
 
                                 <SettingsDialog />
                             </div>
@@ -633,6 +638,8 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                     </div>
                 </div>
             </div>
+
+            <ManageFilesDialog open={isManageFilesOpen} onOpenChange={setIsManageFilesOpen} />
 
             {/* PDF Viewer Modal */}
             <PDFViewer
