@@ -5,6 +5,16 @@ export interface BoundingBox {
     height: number;
 }
 
+export interface HighlightRegion {
+    id: string;
+    boxes: BoundingBox[];
+    envelope: BoundingBox;
+}
+
+function clamp01(value: number): number {
+    return Math.max(0, Math.min(1, value));
+}
+
 function getBoxArea(box: BoundingBox): number {
     return Math.max(0, box.width) * Math.max(0, box.height);
 }
@@ -34,6 +44,103 @@ export function getEnvelopeBox(boxes: BoundingBox[]): BoundingBox | null {
 
 export function getTotalArea(boxes: BoundingBox[]): number {
     return boxes.reduce((sum, box) => sum + getBoxArea(box), 0);
+}
+
+export function expandBoundingBox(box: BoundingBox, margin: number): BoundingBox {
+    const left = clamp01(box.x - margin);
+    const top = clamp01(box.y - margin);
+    const right = clamp01(box.x + box.width + margin);
+    const bottom = clamp01(box.y + box.height + margin);
+
+    return {
+        x: left,
+        y: top,
+        width: Math.max(0, right - left),
+        height: Math.max(0, bottom - top),
+    };
+}
+
+export function getIntersectionArea(a: BoundingBox, b: BoundingBox): number {
+    const left = Math.max(a.x, b.x);
+    const top = Math.max(a.y, b.y);
+    const right = Math.min(a.x + a.width, b.x + b.width);
+    const bottom = Math.min(a.y + a.height, b.y + b.height);
+    if (right <= left || bottom <= top) return 0;
+    return (right - left) * (bottom - top);
+}
+
+function boxesAreNear(
+    a: BoundingBox,
+    b: BoundingBox,
+    verticalGap: number,
+    horizontalProximity: number,
+): boolean {
+    const verticalNear = a.y <= b.y + b.height + verticalGap
+        && b.y <= a.y + a.height + verticalGap;
+    const horizontalNear = a.x <= b.x + b.width + horizontalProximity
+        && b.x <= a.x + a.width + horizontalProximity;
+    return verticalNear && horizontalNear;
+}
+
+export function clusterHighlightRegions(
+    boxes: BoundingBox[],
+    verticalGap: number = 0.045,
+    horizontalProximity: number = 0.08,
+): HighlightRegion[] {
+    if (boxes.length === 0) return [];
+
+    const sorted = [...boxes].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    const regions: Array<{ boxes: BoundingBox[]; envelope: BoundingBox }> = [];
+
+    for (const box of sorted) {
+        let targetRegion: { boxes: BoundingBox[]; envelope: BoundingBox } | null = null;
+        for (const region of regions) {
+            if (boxesAreNear(box, region.envelope, verticalGap, horizontalProximity)) {
+                targetRegion = region;
+                break;
+            }
+        }
+
+        if (!targetRegion) {
+            regions.push({
+                boxes: [{ ...box }],
+                envelope: { ...box },
+            });
+            continue;
+        }
+
+        targetRegion.boxes.push({ ...box });
+        const envelope = getEnvelopeBox(targetRegion.boxes);
+        targetRegion.envelope = envelope ? envelope : targetRegion.envelope;
+    }
+
+    return regions
+        .sort((a, b) => (a.envelope.y - b.envelope.y) || (a.envelope.x - b.envelope.x))
+        .map((region, index) => ({
+            id: `r${index + 1}`,
+            boxes: region.boxes,
+            envelope: region.envelope,
+        }));
+}
+
+export function buildHighlightSignature(boxes: BoundingBox[]): string {
+    if (boxes.length === 0) return 'empty';
+    const serialized = [...boxes]
+        .sort((a, b) => (a.y - b.y) || (a.x - b.x))
+        .map((box) => [
+            box.x.toFixed(3),
+            box.y.toFixed(3),
+            box.width.toFixed(3),
+            box.height.toFixed(3),
+        ].join(','))
+        .join('|');
+
+    let hash = 2166136261;
+    for (let i = 0; i < serialized.length; i += 1) {
+        hash ^= serialized.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16);
 }
 
 export function isCoarseHighlightSet(boxes: BoundingBox[]): boolean {

@@ -29,6 +29,13 @@
       "when": 1770829200000,
       "tag": "0003_pdf_viewer_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1771005600000,
+      "tag": "0004_chunks_highlight_text",
+      "breakpoints": true
     }
   ]
 }

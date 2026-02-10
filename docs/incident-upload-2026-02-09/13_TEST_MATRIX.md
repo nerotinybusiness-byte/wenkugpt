@@ -38,6 +38,13 @@
 - Scenario C: text-layer mismatch -> viewer keeps bbox fallback and remains usable.
 - Scenario D: post-reingest citations -> highlight stays localized (no page-wide overlay).
 
+8. PDF context-anchor regression matrix (2026-02-10 deep-fix)
+- Scenario A: inline citation on known problematic PDF page -> localized paragraph anchor, no top-strip.
+- Scenario B: footer citation on same source/page -> localized paragraph anchor, no top-strip.
+- Scenario C: two different citations on same page -> no stale cache reuse across clicks.
+- Scenario D: context validation failure -> deterministic `bbox-fallback` badge and usable coarse highlight.
+- Scenario E: zoom at `100%` vs `125%` -> same anchor quality and same mode behavior.
+
 ## Browser checks
 - Fresh page load, clear stale upload queue
 - Upload one new PDF and one TXT

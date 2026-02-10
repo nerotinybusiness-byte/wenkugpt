@@ -37,8 +37,12 @@
 - [ ] Citation click no longer paints full page on known problematic PDF.
 - [ ] Inline citation click narrows to the correct text block/line.
 - [ ] Footer citation click narrows similarly.
+- [ ] Two different citations on the same page do not reuse stale context highlight.
 - [ ] Viewer badge reports highlight mode (`bbox` or `context-text`).
 - [ ] Coarse fallback still renders safely when text-layer narrowing fails.
+- [ ] Fallback mode is explicitly reported as `bbox-fallback` when spatial validation rejects context anchor.
+- [ ] Known problematic case no longer shows top-strip false anchor on page `3/4`.
+- [ ] Zoom regression check: behavior consistent at `100%` and `125%`.
 - [ ] Post-reingest checks confirm improved precision on newly uploaded docs.
 
 ## API smoke checks (production CLI)

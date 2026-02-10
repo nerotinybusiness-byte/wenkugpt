@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+    buildHighlightSignature,
+    clusterHighlightRegions,
+    expandBoundingBox,
     getEnvelopeBox,
+    getIntersectionArea,
     isCoarseHighlightSet,
     mergeNearbyBoxes,
 } from '../pdfHighlightUtils';
@@ -53,5 +57,47 @@ describe('getEnvelopeBox', () => {
         expect(envelope?.y).toBeCloseTo(0.25);
         expect(envelope?.width).toBeCloseTo(0.55);
         expect(envelope?.height).toBeCloseTo(0.30);
+    });
+});
+
+describe('buildHighlightSignature', () => {
+    it('returns stable hash for the same box set regardless of input order', () => {
+        const boxesA = [
+            { x: 0.4, y: 0.5, width: 0.2, height: 0.1 },
+            { x: 0.1, y: 0.2, width: 0.1, height: 0.05 },
+        ];
+        const boxesB = [...boxesA].reverse();
+        expect(buildHighlightSignature(boxesA)).toBe(buildHighlightSignature(boxesB));
+    });
+
+    it('changes hash when geometry changes', () => {
+        const base = [{ x: 0.1, y: 0.2, width: 0.2, height: 0.1 }];
+        const shifted = [{ x: 0.11, y: 0.2, width: 0.2, height: 0.1 }];
+        expect(buildHighlightSignature(base)).not.toBe(buildHighlightSignature(shifted));
+    });
+});
+
+describe('clusterHighlightRegions', () => {
+    it('groups nearby rows into the same region and separates distant rows', () => {
+        const regions = clusterHighlightRegions([
+            { x: 0.10, y: 0.20, width: 0.20, height: 0.03 },
+            { x: 0.33, y: 0.205, width: 0.22, height: 0.03 },
+            { x: 0.12, y: 0.62, width: 0.18, height: 0.03 },
+        ]);
+
+        expect(regions.length).toBe(2);
+        expect(regions[0].boxes.length).toBe(2);
+        expect(regions[1].boxes.length).toBe(1);
+    });
+});
+
+describe('intersection helpers', () => {
+    it('expands box and computes positive intersection', () => {
+        const a = { x: 0.20, y: 0.20, width: 0.10, height: 0.10 };
+        const b = { x: 0.31, y: 0.20, width: 0.10, height: 0.10 };
+        expect(getIntersectionArea(a, b)).toBe(0);
+
+        const expanded = expandBoundingBox(a, 0.02);
+        expect(getIntersectionArea(expanded, b)).toBeGreaterThan(0);
     });
 });

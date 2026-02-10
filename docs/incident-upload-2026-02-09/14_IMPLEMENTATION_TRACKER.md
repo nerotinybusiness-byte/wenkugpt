@@ -53,3 +53,16 @@ Fix missing `x-user-email` propagation in browser API requests.
 9. `done` Clear DB + reingest from Supabase storage (`72/72` processed, dedupe to `22` DB docs).
 10. `done` Add viewer retry/suppress logic for coarse highlight race in `src/components/chat/PDFViewer.tsx`.
 11. `in_progress` Final browser citation-click validation on known problematic query/PDF.
+
+## PDF context-anchor deep-fix track (2026-02-10)
+1. `done` Complete root-cause review (UI evidence + code path + DB metadata).
+2. `done` Add dual-read data shape support for `highlightText` (schema/query/agents/API/client types).
+3. `done` Add ingest snippet generation for `chunks.highlight_text`.
+4. `done` Add DB migration scaffold for `highlight_text`.
+5. `done` Replace viewer cache key with page + context + highlight signature.
+6. `done` Implement region-first resolver with spatial validation gate in `PDFViewer`.
+7. `done` Add deterministic `bbox-fallback` mode and debug reason codes.
+8. `done` Add unit tests for context helper + geometry/signature utilities.
+9. `in_progress` Browser regression matrix on known problematic citation flow.
+10. `done` Run static gates (`tsc`, `lint`, `test:run`, `build`).
+11. `planned` Dual-read rollout verification in production and incident closure note.

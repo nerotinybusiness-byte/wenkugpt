@@ -153,6 +153,7 @@ export const chunks = pgTable('chunks', {
   pageNumber: integer('page_number').notNull(),
   boundingBox: jsonb('bounding_box').$type<BoundingBox>(), // Normalized 0.0-1.0
   highlightBoxes: jsonb('highlight_boxes').$type<BoundingBox[]>(),
+  highlightText: text('highlight_text'),
   parentHeader: varchar('parent_header', { length: 512 }), // e.g., "## Section > ### Subsection"
   chunkIndex: integer('chunk_index').notNull(), // Order within document
 
@@ -529,6 +530,7 @@ export interface MessageSource {
   content?: string;
   boundingBox?: BoundingBox | null;
   highlightBoxes?: BoundingBox[] | null;
+  highlightText?: string | null;
   parentHeader?: string | null;
   relevanceScore?: number;
   [key: string]: unknown;

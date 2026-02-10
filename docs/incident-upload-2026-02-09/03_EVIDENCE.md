@@ -32,3 +32,14 @@ Conclusion: endpoint itself can work when auth header is present.
 ## F) Parser patch evidence
 `src/lib/ingest/parser.ts` has local modifications replacing worker bootstrap approach with preloaded `pdfjsWorker` strategy.
 This reduces worker resolution issues in serverless runtime and was validated locally in prior run.
+
+## G) PDF highlight regression evidence (2026-02-10)
+- Production viewer screenshots show badge `1 highlights found (context-text)` while rendered highlight appears as a thin top strip on page `3/4`, not at cited paragraph.
+- Screenshots with `Refining highlight...` confirm context resolver executes, but final anchor can still be semantically wrong.
+- Repro path is stable on known scenario: query `kde je sklad wenku?` with citation to `Manual_na_Wenku_2025_03-5.pdf`.
+
+## H) Code-path evidence for mis-anchor
+- `src/components/chat/ChatMessage.tsx` passed broad context payload (`localContext + source.content.slice(0, 220)` for inline and full `source.content` for footer), which can bias token overlap to top-of-page spans.
+- `src/components/chat/PDFViewer.tsx` ranked spans by lexical overlap only and did not enforce a spatial consistency gate against coarse citation geometry.
+- `src/components/chat/PDFViewer.tsx` cached resolved highlights by page key, which could reuse an incorrect resolution for another citation on the same page.
+- DB inspection of problematic chunk/page showed coarse envelopes and long chunk content that starts near page header text, matching observed top-strip anchoring.

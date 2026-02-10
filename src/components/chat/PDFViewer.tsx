@@ -4,6 +4,11 @@ import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2, Maximize2, Mini
 import { Button } from '@/components/ui/button';
 import {
     type BoundingBox,
+    buildHighlightSignature,
+    clusterHighlightRegions,
+    expandBoundingBox,
+    getIntersectionArea,
+    getTotalArea,
     isCoarseHighlightSet,
     mergeNearbyBoxes,
 } from './pdfHighlightUtils';
@@ -45,8 +50,9 @@ export default function PDFViewer({
     const [scale, setScale] = useState(1.0);
     const [containerWidth, setContainerWidth] = useState(0);
     const [isFullscreen, setIsFullscreen] = useState(false);
-    const [contextHighlights, setContextHighlights] = useState<Record<number, BoundingBox[]>>({});
+    const [contextHighlights, setContextHighlights] = useState<Record<string, BoundingBox[]>>({});
     const [contextResolveFailed, setContextResolveFailed] = useState<Record<string, boolean>>({});
+    const loggedFallbackKeysRef = useRef<Set<string>>(new Set());
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -85,16 +91,22 @@ export default function PDFViewer({
         () => highlights.filter((highlight) => highlight.page === pageNumber).map((highlight) => highlight.bbox),
         [highlights, pageNumber],
     );
+    const highlightSignature = useMemo(
+        () => buildHighlightSignature(currentPageHighlights),
+        [currentPageHighlights],
+    );
     const contextResolveKey = useMemo(
-        () => `${pageNumber}:${normalizeText(highlightContext)}:${scale.toFixed(2)}`,
-        [pageNumber, highlightContext, scale],
+        () => `${pageNumber}:${normalizeText(highlightContext)}:${highlightSignature}`,
+        [pageNumber, highlightContext, highlightSignature],
     );
 
-    const resolvedHighlights = contextHighlights[pageNumber] ?? [];
+    const resolvedHighlights = contextHighlights[contextResolveKey] ?? [];
     const hasContextHighlights = resolvedHighlights.length > 0;
+    const isContextNarrowingEnabled = highlightContext.trim().length > 0 && isCoarseHighlightSet(currentPageHighlights);
+    const contextNarrowingFailed = contextResolveFailed[contextResolveKey] === true;
     const suppressCoarseFallback = highlightContext.trim().length > 0
         && !hasContextHighlights
-        && !contextResolveFailed[contextResolveKey]
+        && !contextNarrowingFailed
         && isCoarseHighlightSet(currentPageHighlights);
     const effectivePageHighlights = hasContextHighlights
         ? resolvedHighlights
@@ -103,6 +115,8 @@ export default function PDFViewer({
             : currentPageHighlights;
     const highlightMode = hasContextHighlights
         ? 'context-text'
+        : isContextNarrowingEnabled && contextNarrowingFailed
+            ? 'bbox-fallback'
         : suppressCoarseFallback
             ? 'context-pending'
             : 'bbox';
@@ -123,6 +137,17 @@ export default function PDFViewer({
     }, [isOpen, pageNumber, numPages]);
 
     useEffect(() => {
+        if (highlightMode !== 'bbox-fallback') return;
+        if (loggedFallbackKeysRef.current.has(contextResolveKey)) return;
+        loggedFallbackKeysRef.current.add(contextResolveKey);
+        console.debug('[PDFViewer] context_bbox_fallback', {
+            pageNumber,
+            contextResolveKey,
+            highlightCount: currentPageHighlights.length,
+        });
+    }, [highlightMode, contextResolveKey, pageNumber, currentPageHighlights.length]);
+
+    useEffect(() => {
         if (!isOpen || !highlightContext.trim() || !isCoarseHighlightSet(currentPageHighlights)) return;
         if (contextResolveFailed[contextResolveKey]) return;
 
@@ -134,6 +159,10 @@ export default function PDFViewer({
         const scheduleRetry = (next: () => void) => {
             if (cancelled) return;
             if (attempts >= maxAttempts) {
+                console.debug('[PDFViewer] context_no_ranked_spans', {
+                    pageNumber,
+                    contextResolveKey,
+                });
                 setContextResolveFailed((prev) => ({
                     ...prev,
                     [contextResolveKey]: true,
@@ -164,34 +193,15 @@ export default function PDFViewer({
                     .split(' ')
                     .filter((token) => token.length >= 3),
             );
-            if (contextTokens.size === 0) return;
-
-            const spans = Array.from(textLayer.querySelectorAll('span')) as HTMLSpanElement[];
-            const ranked = spans
-                .map((span) => {
-                    const text = (span.textContent || '').trim();
-                    if (!text) return null;
-                    const tokens = normalizeText(text).split(' ').filter((token) => token.length >= 3);
-                    if (tokens.length === 0) return null;
-                    const overlapCount = tokens.filter((token) => contextTokens.has(token)).length;
-                    if (overlapCount === 0) return null;
-                    return {
-                        span,
-                        score: overlapCount / tokens.length,
-                    };
-                })
-                .filter((entry): entry is { span: HTMLSpanElement; score: number } => Boolean(entry))
-                .sort((a, b) => b.score - a.score);
-
-            if (ranked.length === 0) {
-                scheduleRetry(resolveContextHighlights);
-                return;
-            }
-
-            const topScore = ranked[0].score;
-            const selected = ranked.filter((entry) => entry.score >= topScore * 0.75).slice(0, 8);
-            if (selected.length === 0) {
-                scheduleRetry(resolveContextHighlights);
+            if (contextTokens.size === 0) {
+                console.debug('[PDFViewer] context_no_tokens', {
+                    pageNumber,
+                    contextResolveKey,
+                });
+                setContextResolveFailed((prev) => ({
+                    ...prev,
+                    [contextResolveKey]: true,
+                }));
                 return;
             }
 
@@ -201,25 +211,91 @@ export default function PDFViewer({
                 return;
             }
 
-            const preciseBoxes = selected.map(({ span }) => {
-                const rect = span.getBoundingClientRect();
-                return {
-                    x: Math.max(0, Math.min(1, (rect.left - pageRect.left) / pageRect.width)),
-                    y: Math.max(0, Math.min(1, (rect.top - pageRect.top) / pageRect.height)),
-                    width: Math.max(0, Math.min(1, rect.width / pageRect.width)),
-                    height: Math.max(0, Math.min(1, rect.height / pageRect.height)),
-                };
+            const toRelativeBox = (rect: DOMRect): BoundingBox => ({
+                x: Math.max(0, Math.min(1, (rect.left - pageRect.left) / pageRect.width)),
+                y: Math.max(0, Math.min(1, (rect.top - pageRect.top) / pageRect.height)),
+                width: Math.max(0, Math.min(1, rect.width / pageRect.width)),
+                height: Math.max(0, Math.min(1, rect.height / pageRect.height)),
             });
 
-            const merged = mergeNearbyBoxes(preciseBoxes).slice(0, 6);
-            if (merged.length === 0) {
+            const spans = Array.from(textLayer.querySelectorAll('span')) as HTMLSpanElement[];
+            const spanEntries = spans
+                .map((span) => {
+                    const text = (span.textContent || '').trim();
+                    if (!text) return null;
+                    const tokens = normalizeText(text).split(' ').filter((token) => token.length >= 3);
+                    if (tokens.length === 0) return null;
+                    const rect = span.getBoundingClientRect();
+                    if (rect.width <= 0 || rect.height <= 0) return null;
+                    const box = toRelativeBox(rect);
+                    return { span, tokens, box };
+                })
+                .filter((entry): entry is { span: HTMLSpanElement; tokens: string[]; box: BoundingBox } => Boolean(entry));
+
+            const regions = clusterHighlightRegions(currentPageHighlights);
+            const regionCandidates = regions
+                .map((region) => {
+                    const expandedEnvelope = expandBoundingBox(region.envelope, 0.015);
+                    const ranked = spanEntries
+                        .filter((entry) => getIntersectionArea(entry.box, expandedEnvelope) > 0)
+                        .map((entry) => {
+                            const overlapCount = entry.tokens.filter((token) => contextTokens.has(token)).length;
+                            if (overlapCount === 0) return null;
+                            const lexicalScore = overlapCount / entry.tokens.length;
+                            const spanArea = Math.max(entry.box.width * entry.box.height, 1e-6);
+                            const regionCoverage = getIntersectionArea(entry.box, region.envelope) / spanArea;
+                            const composite = (0.75 * lexicalScore) + (0.25 * regionCoverage);
+                            return {
+                                span: entry.span,
+                                box: entry.box,
+                                composite,
+                            };
+                        })
+                        .filter((entry): entry is { span: HTMLSpanElement; box: BoundingBox; composite: number } => Boolean(entry))
+                        .sort((a, b) => b.composite - a.composite);
+
+                    const regionScore = ranked.slice(0, 3).reduce((sum, entry) => sum + entry.composite, 0);
+                    return { region, ranked, regionScore };
+                })
+                .filter((entry) => entry.ranked.length > 0)
+                .sort((a, b) => b.regionScore - a.regionScore);
+
+            if (regionCandidates.length === 0) {
                 scheduleRetry(resolveContextHighlights);
+                return;
+            }
+
+            const bestRegion = regionCandidates[0];
+            const topScore = bestRegion.ranked[0].composite;
+            const selected = bestRegion.ranked
+                .filter((entry) => entry.composite >= topScore * 0.75)
+                .slice(0, 8);
+            if (selected.length === 0) {
+                scheduleRetry(resolveContextHighlights);
+                return;
+            }
+
+            const preciseBoxes = selected.map(({ box }) => box);
+            const merged = mergeNearbyBoxes(preciseBoxes).slice(0, 6);
+            const totalArea = getTotalArea(merged);
+            if (merged.length === 0 || totalArea < 0.0008 || selected.length < 2) {
+                console.debug('[PDFViewer] context_spatial_gate_fail', {
+                    pageNumber,
+                    contextResolveKey,
+                    mergedCount: merged.length,
+                    selectedCount: selected.length,
+                    totalArea,
+                });
+                setContextResolveFailed((prev) => ({
+                    ...prev,
+                    [contextResolveKey]: true,
+                }));
                 return;
             }
 
             setContextHighlights((prev) => ({
                 ...prev,
-                [pageNumber]: merged,
+                [contextResolveKey]: merged,
             }));
             setContextResolveFailed((prev) => {
                 if (!prev[contextResolveKey]) return prev;
@@ -239,7 +315,6 @@ export default function PDFViewer({
         isOpen,
         highlightContext,
         pageNumber,
-        scale,
         currentPageHighlights,
         contextResolveFailed,
         contextResolveKey,

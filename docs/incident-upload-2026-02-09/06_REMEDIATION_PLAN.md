@@ -105,3 +105,30 @@ Tasks:
 
 Output:
 - Page-wide highlights no longer appear for targeted citation clicks on verified documents.
+
+## Phase 7 - Context anchor correctness hardening (2026-02-10)
+Status: In progress
+
+Tasks:
+1. Context payload narrowing:
+   - inline citations use only local answer snippet
+   - footer citations prefer ingest snippet (`highlightText`) and fallback to local answer snippet
+2. Dual-read data rollout:
+   - add nullable `chunks.highlight_text`
+   - wire through query + agent + API payloads
+3. Ingest snippet generation:
+   - build `highlightText` from ordered source blocks (`y,x`), normalize whitespace, cap length
+4. Viewer spatial validation hardening:
+   - region-first candidate selection from coarse boxes
+   - lexical + region coverage composite scoring
+   - spatial gate before accepting `context-text`
+   - deterministic `bbox-fallback` when spatial gate fails
+5. Cache correctness:
+   - key context cache by page + normalized context + highlight signature
+6. Validation:
+   - unit tests for context helpers and geometry helpers
+   - manual browser smoke on known problematic PDF
+
+Output:
+- `context-text` is reported only for spatially valid anchors.
+- Wrong top-strip anchors degrade to explicit `bbox-fallback` instead of false precision.

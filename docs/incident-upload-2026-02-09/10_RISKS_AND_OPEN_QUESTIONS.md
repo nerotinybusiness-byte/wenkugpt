@@ -29,6 +29,11 @@
 - Mitigation: page-local ingest matching fix, bounded highlightBoxes generation, strengthened coarse detection + context-text fallback, viewer retry logic for context highlight resolution, temporary suppression of coarse overlay while context resolution is pending, full document reupload/reingest.
 - Status: in progress.
 
+7. False-positive `context-text` success state (opened 2026-02-10)
+- Risk: viewer can show `context-text` badge while selected anchor is spatially wrong (top-strip match on same page).
+- Mitigation: narrow context payloads, region-first resolver, spatial validation gate, key-based context cache with highlight signature, deterministic `bbox-fallback`.
+- Status: in progress.
+
 ## Open questions requiring decision
 1. What is canonical client-side identity source?
 - Option A: `NEXT_PUBLIC_DEFAULT_USER_EMAIL` (simple, static)
@@ -43,6 +48,9 @@
 
 4. Should we add explicit "highlight mode" badge in PDF viewer? (resolved 2026-02-10)
 - Decision: show when highlight is `bbox` vs `context-text` fallback for easier debugging.
+
+5. What is the minimum acceptable spatial overlap threshold for `context-text` acceptance?
+- Proposed default: require spatial gate support of at least 2 spans and merged area >= `0.0008`.
 
 ## Exit criteria for incident closure
 - Header propagation fixed and verified in browser.

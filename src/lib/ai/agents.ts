@@ -41,6 +41,8 @@ export interface SourceChunk {
     boundingBox: { x: number; y: number; width: number; height: number } | null;
     /** Fine-grained highlight boxes for line/paragraph precision */
     highlightBoxes?: Array<{ x: number; y: number; width: number; height: number }> | null;
+    /** Ingest-time short snippet for text-layer anchoring */
+    highlightText?: string | null;
     /** Parent header */
     parentHeader: string | null;
     /** Source filename */
@@ -254,6 +256,7 @@ async function agentRetriever(
         pageNumber: result.pageNumber,
         boundingBox: result.boundingBox,
         highlightBoxes: result.highlightBoxes ?? null,
+        highlightText: result.highlightText ?? null,
         parentHeader: result.parentHeader,
         filename: result.filename,
         originalFilename: result.originalFilename ?? null,
@@ -451,6 +454,7 @@ async function executeRAGCore(
                 pageNumber: chunk?.pageNumber || c.page,
                 boundingBox: chunk?.boundingBox || null,
                 highlightBoxes: chunk?.highlightBoxes ?? (chunk?.boundingBox ? [chunk.boundingBox] : null),
+                highlightText: chunk?.highlightText ?? null,
                 parentHeader: chunk?.parentHeader || null,
                 filename: chunk?.filename,
                 originalFilename: chunk?.originalFilename ?? null,

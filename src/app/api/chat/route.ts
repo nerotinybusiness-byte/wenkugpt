@@ -196,6 +196,7 @@ export async function POST(request: NextRequest) {
                 originalFilename: s.originalFilename ?? s.filename ?? null,
                 boundingBox: s.boundingBox,
                 highlightBoxes: s.highlightBoxes ?? (s.boundingBox ? [s.boundingBox] : null),
+                highlightText: s.highlightText ?? null,
             })),
         });
 
@@ -210,6 +211,7 @@ export async function POST(request: NextRequest) {
                 pageNumber: s.pageNumber,
                 boundingBox: s.boundingBox,
                 highlightBoxes: s.highlightBoxes ?? (s.boundingBox ? [s.boundingBox] : null),
+                highlightText: s.highlightText ?? null,
                 parentHeader: s.parentHeader,
                 filename: s.filename,
                 originalFilename: s.originalFilename ?? s.filename ?? null,

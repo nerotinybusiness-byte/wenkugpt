@@ -113,6 +113,22 @@ Use this file as append-only progress log.
   - `npx tsc --noEmit --incremental false` passed.
   - `npm run test:run` passed (38 tests).
 - Current status: reingest + smoke checks complete; final manual browser confirmation of citation highlight precision is pending.
+- Additional root-cause review confirmed a second-order issue:
+  - viewer can report `context-text` while highlight is mis-anchored (thin top strip) on known problematic PDF page.
+- Implementation started for deep-fix track (dual-read + spatial gate):
+  - added `highlightText` plumbing in source payload types and chat API mapping.
+  - added DB migration scaffold for `chunks.highlight_text`.
+  - added ingest snippet generation for `highlight_text`.
+  - rewired viewer context cache key to page + normalized context + highlight signature.
+  - replaced global lexical span resolver with region-first resolver + spatial validation gate.
+  - added deterministic `bbox-fallback` mode and debug reason codes (`context_no_tokens`, `context_no_ranked_spans`, `context_spatial_gate_fail`, `context_bbox_fallback`).
+  - added unit tests for geometry/signature helpers and chat context payload helpers.
+- Validation after deep-fix implementation:
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run test:run` passed (`45/45`).
+  - `npm run build` passed.
+- Current status: code and automated gates are green; remaining work is browser regression matrix on known problematic citation flow.
 ## Next log entry template
 - Date:
 - Change made:

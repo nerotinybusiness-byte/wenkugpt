@@ -34,6 +34,7 @@ interface Source {
     pageNumber: number;
     boundingBox: { x: number; y: number; width: number; height: number } | null;
     highlightBoxes?: Array<{ x: number; y: number; width: number; height: number }> | null;
+    highlightText?: string | null;
     parentHeader: string | null;
     filename?: string;
     originalFilename?: string | null;
@@ -178,7 +179,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
             }
             setPdfTitle(getDisplayFilename(source));
             setInitialPage(source.pageNumber || 1);
-            setHighlightContext(source.contextText?.trim() || '');
+            setHighlightContext((source.contextText || source.highlightText || '').trim());
 
             // Set highlight boxes with fallback to the coarse chunk bounding box.
             if (source.highlightBoxes && source.highlightBoxes.length > 0) {

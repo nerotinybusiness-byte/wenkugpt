@@ -141,6 +141,34 @@ function buildHighlightBoxes(chunk: SemanticChunk): BoundingBox[] | null {
     return boxes;
 }
 
+function buildHighlightText(chunk: SemanticChunk): string | null {
+    const sourceBlocks = (chunk as SemanticChunk & {
+        sourceBlocks?: Array<{ bbox?: BoundingBox; text?: string }>;
+    }).sourceBlocks;
+    if (!Array.isArray(sourceBlocks) || sourceBlocks.length === 0) {
+        return null;
+    }
+
+    const snippet = sourceBlocks
+        .filter((block) => typeof block?.text === 'string')
+        .sort((a, b) => {
+            const ay = a.bbox?.y ?? 0;
+            const by = b.bbox?.y ?? 0;
+            if (ay !== by) return ay - by;
+            const ax = a.bbox?.x ?? 0;
+            const bx = b.bbox?.x ?? 0;
+            return ax - bx;
+        })
+        .map((block) => (block.text || '').replace(/\s+/g, ' ').trim())
+        .filter((text) => text.length > 0)
+        .slice(0, 6)
+        .join(' ')
+        .trim()
+        .slice(0, 480);
+
+    return snippet || null;
+}
+
 /**
  * Process a document through the full ingestion pipeline
  * 
@@ -291,6 +319,7 @@ export async function processPipeline(
                     pageNumber: chunk.page,
                     boundingBox: chunk.bbox,
                     highlightBoxes: buildHighlightBoxes(chunk),
+                    highlightText: buildHighlightText(chunk),
                     parentHeader: chunk.parentHeader || null,
                     chunkIndex: index,
                     tokenCount: chunk.tokenCount,

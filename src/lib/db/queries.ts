@@ -27,6 +27,8 @@ export interface SearchResult {
   boundingBox: { x: number; y: number; width: number; height: number } | null;
   /** Fine-grained bounding boxes for paragraph/line-level highlighting */
   highlightBoxes?: Array<{ x: number; y: number; width: number; height: number }> | null;
+  /** Ingest-time short snippet for text-layer anchoring */
+  highlightText?: string | null;
   /** Parent header hierarchy */
   parentHeader: string | null;
   /** Vector similarity score (0-1, higher is better) */
@@ -80,6 +82,7 @@ interface HybridSearchRow {
   page_number: number;
   bounding_box: { x: number; y: number; width: number; height: number } | null;
   highlight_boxes: Array<{ x: number; y: number; width: number; height: number }> | null;
+  highlight_text: string | null;
   parent_header: string | null;
   token_count: number;
   vector_score: number;
@@ -126,6 +129,7 @@ export async function hybridSearch(
         c.page_number,
         c.bounding_box,
         c.highlight_boxes,
+        c.highlight_text,
         c.parent_header,
         c.token_count,
         1 - (c.embedding <=> (SELECT embedding FROM query_embedding)) AS vector_score
@@ -153,6 +157,7 @@ export async function hybridSearch(
       v.page_number,
       v.bounding_box,
       v.highlight_boxes,
+      v.highlight_text,
       v.parent_header,
       v.token_count,
       v.vector_score,
@@ -181,6 +186,7 @@ export async function hybridSearch(
     pageNumber: row.page_number,
     boundingBox: row.bounding_box,
     highlightBoxes: row.highlight_boxes,
+    highlightText: row.highlight_text,
     parentHeader: row.parent_header,
     vectorScore: Number(row.vector_score),
     textScore: Number(row.text_score),
@@ -209,6 +215,7 @@ export async function vectorSearch(
       c.page_number,
       c.bounding_box,
       c.highlight_boxes,
+      c.highlight_text,
       c.parent_header,
       c.token_count,
       1 - (c.embedding <=> ${sql.raw(embeddingStr)}) AS vector_score,
@@ -230,6 +237,7 @@ export async function vectorSearch(
     page_number: number;
     bounding_box: { x: number; y: number; width: number; height: number } | null;
     highlight_boxes: Array<{ x: number; y: number; width: number; height: number }> | null;
+    highlight_text: string | null;
     parent_header: string | null;
     token_count: number;
     vector_score: number;
@@ -242,6 +250,7 @@ export async function vectorSearch(
     pageNumber: row.page_number,
     boundingBox: row.bounding_box,
     highlightBoxes: row.highlight_boxes,
+    highlightText: row.highlight_text,
     parentHeader: row.parent_header,
     vectorScore: Number(row.vector_score),
     textScore: 0,
@@ -264,6 +273,7 @@ export async function getChunkById(chunkId: string): Promise<SearchResult | null
       c.page_number,
       c.bounding_box,
       c.highlight_boxes,
+      c.highlight_text,
       c.parent_header,
       c.token_count,
       d.filename,
@@ -285,6 +295,7 @@ export async function getChunkById(chunkId: string): Promise<SearchResult | null
     page_number: number;
     bounding_box: { x: number; y: number; width: number; height: number } | null;
     highlight_boxes: Array<{ x: number; y: number; width: number; height: number }> | null;
+    highlight_text: string | null;
     parent_header: string | null;
     token_count: number;
     filename: string;
@@ -297,6 +308,7 @@ export async function getChunkById(chunkId: string): Promise<SearchResult | null
     pageNumber: row.page_number,
     boundingBox: row.bounding_box,
     highlightBoxes: row.highlight_boxes,
+    highlightText: row.highlight_text,
     parentHeader: row.parent_header,
     vectorScore: 1,
     textScore: 0,
