@@ -81,3 +81,27 @@ Tasks:
 
 Output:
 - Operationally stable and documented system.
+
+## Phase 6 - PDF citation highlight precision remediation (2026-02-10)
+Status: In progress
+
+Tasks:
+1. Ingest matching fix:
+   - enforce page-local block matching in `src/lib/ingest/chunker.ts`
+   - prevent cross-page source block merges for chunk bbox generation
+2. Highlight metadata hardening:
+   - sanitize/deduplicate/merge/cap `highlightBoxes` in `src/lib/ingest/pipeline.ts`
+3. Viewer fallback hardening:
+   - coarse detection for both single and multi-box highlight sets
+   - context-text narrowing fallback for coarse sets
+   - visible mode badge (`bbox` vs `context-text`) for diagnostics
+4. Verification:
+   - run `npx tsc --noEmit --incremental false`, `npm run lint`, `npm run test:run`
+   - run manual citation smoke test on known problematic query/doc
+5. Data rollout:
+   - clear old documents
+   - reupload/reingest full document set
+   - re-validate highlight precision
+
+Output:
+- Page-wide highlights no longer appear for targeted citation clicks on verified documents.

@@ -164,5 +164,38 @@ describe('chunkDocument', () => {
             expect(chunks[i].index).toBe(i);
         }
     });
+
+    it('keeps sourceBlocks page-local when similar text appears on multiple pages', () => {
+        const repeatedText = Array(80).fill('sklad wenku adresa informace').join(' ');
+        const pages: ParsedPage[] = [
+            {
+                pageNumber: 1,
+                width: 612,
+                height: 792,
+                textBlocks: [
+                    { text: repeatedText, page: 1, bbox: { x: 0.10, y: 0.12, width: 0.35, height: 0.06 } },
+                ],
+                fullText: repeatedText,
+            },
+            {
+                pageNumber: 2,
+                width: 612,
+                height: 792,
+                textBlocks: [
+                    { text: repeatedText, page: 2, bbox: { x: 0.10, y: 0.78, width: 0.35, height: 0.06 } },
+                ],
+                fullText: repeatedText,
+            },
+        ];
+
+        const chunks = chunkDocument(pages, { ...DEFAULT_CHUNKER_CONFIG, minTokens: 10 });
+        const firstPageChunk = chunks.find((chunk) => chunk.page === 1);
+
+        expect(firstPageChunk).toBeDefined();
+        expect(firstPageChunk?.sourceBlocks.length).toBeGreaterThan(0);
+        expect(firstPageChunk?.sourceBlocks.every((block) => block.page === 1)).toBe(true);
+        expect(firstPageChunk?.bbox.y).toBeCloseTo(0.12);
+        expect(firstPageChunk?.bbox.height).toBeCloseTo(0.06);
+    });
 });
 

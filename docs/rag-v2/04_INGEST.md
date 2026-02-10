@@ -10,6 +10,9 @@
   - `interně tomu říkáme ...`
   - `aka`, `=`
 - n-gram frequency fallback for repeated terms
+- PDF highlight metadata precision guardrails:
+  - chunk-to-block matching is page-local (no cross-page bbox merge)
+  - per-chunk highlight boxes are sanitized/deduplicated and capped
 
 3. Candidate persistence
 - insert/update `term_candidates`
@@ -32,3 +35,6 @@
 ## Idempotency
 - upsert behavior by normalized term + document key
 - frequency increments instead of duplicate rows
+
+## Operational note (2026-02-10)
+- After ingest precision logic changes, legacy documents should be reuploaded/reingested to refresh stored bbox/highlight metadata.

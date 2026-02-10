@@ -73,6 +73,46 @@ Use this file as append-only progress log.
   - `npx tsc --noEmit --incremental false` passed.
   - `npm run lint` passed.
   - `npm run test:run` passed (32 tests).
+- Started end-to-end PDF highlight precision remediation after user approval:
+  - decision confirmed: full code fix + full document reupload/reingest.
+  - implemented ingest matching hardening in `src/lib/ingest/chunker.ts` (page-local block matching).
+  - implemented highlight metadata hardening in `src/lib/ingest/pipeline.ts` (sanitize/dedupe/merge/cap).
+  - implemented viewer hardening in `src/components/chat/PDFViewer.tsx`:
+    - coarse detection for multi-box highlight sets
+    - tighter context-text fallback thresholding
+    - visible highlight mode label (`bbox` vs `context-text`)
+  - improved citation context composition in `src/components/chat/ChatMessage.tsx`.
+  - expanded diagnostics in `scripts/check_bboxes.ts` to include highlight box density/coarse indicators.
+  - added regression tests:
+    - `src/lib/ingest/__tests__/chunker.test.ts` (page-local sourceBlocks)
+    - `src/components/chat/__tests__/pdfHighlightUtils.test.ts`
+- Current status: implementation in progress; static/test gate run pending; runtime validation pending reupload.
+- Ran static/test gates for remediation branch:
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run test:run` passed (38 tests).
+  - `npm run build` passed.
+- Current status: code changes and automated gates are green; pending runtime validation after document reupload/reingest.
+- Executed data reset and reingest workflow:
+  - `node scripts/clear_docs.js` completed.
+  - `node scripts/check_files.js` confirmed `Total documents in DB: 0`.
+  - Supabase bucket `documents` list confirmed `74` objects, `72` supported (`.pdf/.txt`).
+  - Bulk reingest via `processPipeline` from storage completed `72/72` success, `0` failures.
+  - DB post-check after dedupe: `22` unique documents.
+- Smoke retrieval check run for query `kde je sklad wenku?`:
+  - retrieval returned relevant Wenku sources and address snippets (`Na Hanspaulce ...`).
+  - source highlight metadata still classified as coarse on several top hits, but no ingest/runtime failures.
+- Root cause refinement found in viewer fallback:
+  - context-text narrowing in `PDFViewer` previously attempted only once after 220ms.
+  - when text layer was not ready in that window, coarse highlight fallback persisted.
+- Implemented viewer hotfix in `src/components/chat/PDFViewer.tsx`:
+  - retry loop for context-text highlight resolution.
+  - temporary suppression of coarse overlay while refinement is in progress.
+  - status chip `Refining highlight...` during narrowing.
+- Re-ran validation after hotfix:
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run test:run` passed (38 tests).
+- Current status: reingest + smoke checks complete; final manual browser confirmation of citation highlight precision is pending.
 ## Next log entry template
 - Date:
 - Change made:

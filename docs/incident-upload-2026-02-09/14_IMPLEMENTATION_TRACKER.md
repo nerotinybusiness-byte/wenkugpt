@@ -40,3 +40,16 @@ Fix missing `x-user-email` propagation in browser API requests.
 6. `done` Add v2 feature flags + backend kill-switch.
 7. `done` Add term-candidate ingestion scaffolding and review workflow helpers.
 8. `in_progress` Expand integration coverage and runtime validation checklist.
+
+## PDF highlight precision remediation track (2026-02-10)
+1. `done` Confirm strategy (`end-to-end`) and rollout decision (`full reupload/reingest`).
+2. `done` Implement page-local chunk block matching in `src/lib/ingest/chunker.ts`.
+3. `done` Harden highlight metadata generation in `src/lib/ingest/pipeline.ts`.
+4. `done` Harden viewer coarse detection + context fallback + mode badge in `src/components/chat/PDFViewer.tsx`.
+5. `done` Improve citation context propagation in `src/components/chat/ChatMessage.tsx`.
+6. `done` Expand bbox diagnostic tooling in `scripts/check_bboxes.ts`.
+7. `done` Run static gates and regression tests.
+8. `in_progress` Reupload/reingest docs and complete runtime citation validation.
+9. `done` Clear DB + reingest from Supabase storage (`72/72` processed, dedupe to `22` DB docs).
+10. `done` Add viewer retry/suppress logic for coarse highlight race in `src/components/chat/PDFViewer.tsx`.
+11. `in_progress` Final browser citation-click validation on known problematic query/PDF.

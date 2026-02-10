@@ -32,6 +32,12 @@
 - User header -> success
 - Missing header -> 401
 
+7. PDF citation highlight behavior
+- Scenario A: coarse single-box citation -> viewer narrows highlight using context-text fallback.
+- Scenario B: coarse multi-box citation -> viewer narrows highlight using context-text fallback.
+- Scenario C: text-layer mismatch -> viewer keeps bbox fallback and remains usable.
+- Scenario D: post-reingest citations -> highlight stays localized (no page-wide overlay).
+
 ## Browser checks
 - Fresh page load, clear stale upload queue
 - Upload one new PDF and one TXT
@@ -43,3 +49,4 @@
 - Validate against deployed alias after release
 - Confirm no `Missing identity header` messages in UI
 - Confirm no new `DOMMatrix is not defined` on fresh uploads
+- Confirm known problematic citation (`kde je sklad wenku?`) highlights only target region after reingest

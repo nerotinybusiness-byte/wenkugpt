@@ -17,15 +17,27 @@ interface Source {
     title?: string;
 }
 
-function extractCitationContext(content: string, citationIndex: number): string {
+function extractCitationContext(content: string, citationIndex: number, citationLength: number): string {
     const left = content.slice(0, citationIndex);
-    const sentenceBoundary = Math.max(
+    const leftBoundary = Math.max(
         left.lastIndexOf('\n'),
         left.lastIndexOf('.'),
         left.lastIndexOf('!'),
         left.lastIndexOf('?'),
     );
-    return left.slice(Math.max(0, sentenceBoundary + 1)).trim().slice(-240);
+    const leftText = left.slice(Math.max(0, leftBoundary + 1)).trim().slice(-220);
+
+    const right = content.slice(citationIndex + citationLength);
+    const rightCandidates = [
+        right.indexOf('\n'),
+        right.indexOf('.'),
+        right.indexOf('!'),
+        right.indexOf('?'),
+    ].filter((value) => value >= 0);
+    const rightBoundary = rightCandidates.length > 0 ? Math.min(...rightCandidates) : Math.min(right.length, 140);
+    const rightText = right.slice(0, rightBoundary).trim().slice(0, 140);
+
+    return `${leftText} ${rightText}`.trim().slice(0, 320);
 }
 
 interface ChatMessageProps {
@@ -60,7 +72,8 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
             const source = message.sources.find(s => s.id === citationId);
 
             if (source) {
-                const contextText = extractCitationContext(message.content, match.index);
+                const localContext = extractCitationContext(message.content, match.index, match[0].length);
+                const contextText = [localContext, source.content?.slice(0, 220)].filter(Boolean).join(' ').trim();
                 parts.push(
                     <CitationLink
                         key={`citation-${match.index}`}

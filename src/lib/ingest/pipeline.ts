@@ -58,15 +58,67 @@ function normalizeDisplayFilename(filename: string): string {
     return basename.replace(/^[^_]+_[0-9a-fA-F-]{36}_/, '');
 }
 
+function clamp01(value: number): number {
+    return Math.max(0, Math.min(1, value));
+}
+
+function sanitizeBoundingBox(bbox: BoundingBox | null | undefined): BoundingBox | null {
+    if (!bbox) return null;
+    const values = [bbox.x, bbox.y, bbox.width, bbox.height];
+    if (values.some((value) => !Number.isFinite(value))) return null;
+
+    const x = clamp01(bbox.x);
+    const y = clamp01(bbox.y);
+    const width = clamp01(Math.min(bbox.width, 1 - x));
+    const height = clamp01(Math.min(bbox.height, 1 - y));
+    if (width <= 0 || height <= 0) return null;
+
+    return { x, y, width, height };
+}
+
+function mergeNearbyHighlightBoxes(boxes: BoundingBox[]): BoundingBox[] {
+    if (boxes.length <= 1) return boxes;
+
+    const sorted = [...boxes].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    const merged: BoundingBox[] = [];
+
+    for (const box of sorted) {
+        const last = merged[merged.length - 1];
+        if (!last) {
+            merged.push({ ...box });
+            continue;
+        }
+
+        const sameRow = Math.abs(last.y - box.y) < 0.02 && Math.abs(last.height - box.height) < 0.03;
+        const touching = box.x <= last.x + last.width + 0.03;
+        if (sameRow && touching) {
+            const minX = Math.min(last.x, box.x);
+            const maxX = Math.max(last.x + last.width, box.x + box.width);
+            const minY = Math.min(last.y, box.y);
+            const maxY = Math.max(last.y + last.height, box.y + box.height);
+            last.x = minX;
+            last.y = minY;
+            last.width = maxX - minX;
+            last.height = maxY - minY;
+            continue;
+        }
+
+        merged.push({ ...box });
+    }
+
+    return merged;
+}
+
 function buildHighlightBoxes(chunk: SemanticChunk): BoundingBox[] | null {
+    const chunkBox = sanitizeBoundingBox(chunk.bbox);
     const sourceBlocks = (chunk as SemanticChunk & { sourceBlocks?: Array<{ bbox: BoundingBox }> }).sourceBlocks;
     if (!Array.isArray(sourceBlocks) || sourceBlocks.length === 0) {
-        return chunk.bbox ? [chunk.bbox] : null;
+        return chunkBox ? [chunkBox] : null;
     }
 
     const dedup = new Map<string, BoundingBox>();
     for (const block of sourceBlocks) {
-        const bbox = block?.bbox;
+        const bbox = sanitizeBoundingBox(block?.bbox);
         if (!bbox) continue;
         const key = [
             bbox.x.toFixed(4),
@@ -77,12 +129,13 @@ function buildHighlightBoxes(chunk: SemanticChunk): BoundingBox[] | null {
         if (!dedup.has(key)) dedup.set(key, bbox);
     }
 
-    const boxes = [...dedup.values()]
+    const boxes = mergeNearbyHighlightBoxes([...dedup.values()]
         .sort((a, b) => (a.y - b.y) || (a.x - b.x))
-        .slice(0, 32);
+        .slice(0, 48))
+        .slice(0, 24);
 
     if (boxes.length === 0) {
-        return chunk.bbox ? [chunk.bbox] : null;
+        return chunkBox ? [chunkBox] : null;
     }
 
     return boxes;

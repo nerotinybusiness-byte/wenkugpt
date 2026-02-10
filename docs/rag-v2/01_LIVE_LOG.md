@@ -135,3 +135,33 @@ Append-only execution log for `RAG v2 (Slang-aware Context Graph Memory)`.
   - run manual production smoke with query `kde je sklad wenku?` and verify:
     - filename normalization in PDF header
     - highlight limited to address line (not page-wide overlay)
+
+- Change made:
+  - implemented end-to-end precision remediation for coarse PDF citation highlights:
+    - ingest chunk matching is now page-local (prevents cross-page bbox inflation)
+    - highlight box generation sanitizes, deduplicates, merges nearby boxes, and caps output count
+    - viewer coarse detection now supports multi-box coverage and not only single-box cases
+    - viewer footer now shows explicit highlight mode (`bbox` or `context-text`)
+    - citation context payload around `[n]` markers now includes both local sentence context and source snippet
+    - diagnostics script `scripts/check_bboxes.ts` now reports highlight density/coarse indicators
+  - added regression tests for page-local chunk matching and highlight utility heuristics.
+- Files touched:
+  - `src/lib/ingest/chunker.ts`
+  - `src/lib/ingest/pipeline.ts`
+  - `src/components/chat/PDFViewer.tsx`
+  - `src/components/chat/ChatMessage.tsx`
+  - `src/components/chat/pdfHighlightUtils.ts`
+  - `src/components/chat/__tests__/pdfHighlightUtils.test.ts`
+  - `src/lib/ingest/__tests__/chunker.test.ts`
+  - `scripts/check_bboxes.ts`
+- Verification run:
+  - `npx tsc --noEmit --incremental false` passed
+  - `npm run lint` passed
+  - `npm run test:run` passed (38 tests)
+  - `npm run build` passed
+- Result:
+  - code changes in place for end-to-end precision fix; automated gates are green; runtime verification pending
+- New risk or blocker:
+  - legacy documents still require reupload/reingest to fully benefit from ingest-side precision updates
+- Next action:
+  - run static gates + tests, then reupload docs and execute manual citation smoke

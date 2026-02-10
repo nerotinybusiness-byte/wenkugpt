@@ -2,17 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+    type BoundingBox,
+    isCoarseHighlightSet,
+    mergeNearbyBoxes,
+} from './pdfHighlightUtils';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-
-interface BoundingBox {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-}
 
 interface PDFViewerProps {
     url: string | null;
@@ -31,45 +29,6 @@ function normalizeText(value: string): string {
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]+/g, ' ')
         .trim();
-}
-
-function isCoarseHighlight(boxes: BoundingBox[]): boolean {
-    if (boxes.length !== 1) return false;
-    const box = boxes[0];
-    return box.width * box.height > 0.2 || box.height > 0.25 || box.width > 0.8;
-}
-
-function mergeNearbyBoxes(boxes: BoundingBox[]): BoundingBox[] {
-    if (boxes.length <= 1) return boxes;
-
-    const sorted = [...boxes].sort((a, b) => (a.y - b.y) || (a.x - b.x));
-    const merged: BoundingBox[] = [];
-
-    for (const box of sorted) {
-        const last = merged[merged.length - 1];
-        if (!last) {
-            merged.push({ ...box });
-            continue;
-        }
-
-        const similarRow = Math.abs(last.y - box.y) < 0.02 && Math.abs(last.height - box.height) < 0.03;
-        const touching = box.x <= last.x + last.width + 0.03;
-        if (similarRow && touching) {
-            const minX = Math.min(last.x, box.x);
-            const maxX = Math.max(last.x + last.width, box.x + box.width);
-            const minY = Math.min(last.y, box.y);
-            const maxY = Math.max(last.y + last.height, box.y + box.height);
-            last.x = minX;
-            last.y = minY;
-            last.width = maxX - minX;
-            last.height = maxY - minY;
-            continue;
-        }
-
-        merged.push({ ...box });
-    }
-
-    return merged;
 }
 
 export default function PDFViewer({
@@ -126,9 +85,21 @@ export default function PDFViewer({
         [highlights, pageNumber],
     );
 
-    const effectivePageHighlights = contextHighlights[pageNumber]?.length
-        ? contextHighlights[pageNumber]
-        : currentPageHighlights;
+    const resolvedHighlights = contextHighlights[pageNumber] ?? [];
+    const hasContextHighlights = resolvedHighlights.length > 0;
+    const suppressCoarseFallback = highlightContext.trim().length > 0
+        && !hasContextHighlights
+        && isCoarseHighlightSet(currentPageHighlights);
+    const effectivePageHighlights = hasContextHighlights
+        ? resolvedHighlights
+        : suppressCoarseFallback
+            ? []
+            : currentPageHighlights;
+    const highlightMode = hasContextHighlights
+        ? 'context-text'
+        : suppressCoarseFallback
+            ? 'context-pending'
+            : 'bbox';
 
     const scrollToPage = (targetPage: number, behavior: ScrollBehavior = 'smooth') => {
         const container = scrollContainerRef.current;
@@ -146,17 +117,34 @@ export default function PDFViewer({
     }, [isOpen, pageNumber, numPages]);
 
     useEffect(() => {
-        if (!isOpen) return;
-        if (!highlightContext.trim()) return;
-        if (!isCoarseHighlight(currentPageHighlights)) return;
+        if (!isOpen || !highlightContext.trim() || !isCoarseHighlightSet(currentPageHighlights)) return;
 
-        const timer = setTimeout(() => {
+        let cancelled = false;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        let attempts = 0;
+        const maxAttempts = 12;
+
+        const scheduleRetry = (next: () => void) => {
+            if (cancelled) return;
+            if (attempts >= maxAttempts) return;
+            attempts += 1;
+            timer = setTimeout(next, 180);
+        };
+
+        const resolveContextHighlights = () => {
+            if (cancelled) return;
             const pageWrapper = pageRefs.current.get(pageNumber);
-            if (!pageWrapper) return;
+            if (!pageWrapper) {
+                scheduleRetry(resolveContextHighlights);
+                return;
+            }
 
             const pageElement = pageWrapper.querySelector('.react-pdf__Page') as HTMLElement | null;
             const textLayer = pageWrapper.querySelector('.react-pdf__Page__textContent') as HTMLElement | null;
-            if (!pageElement || !textLayer) return;
+            if (!pageElement || !textLayer || textLayer.childElementCount === 0) {
+                scheduleRetry(resolveContextHighlights);
+                return;
+            }
 
             const contextTokens = new Set(
                 normalizeText(highlightContext)
@@ -182,14 +170,23 @@ export default function PDFViewer({
                 .filter((entry): entry is { span: HTMLSpanElement; score: number } => Boolean(entry))
                 .sort((a, b) => b.score - a.score);
 
-            if (ranked.length === 0) return;
+            if (ranked.length === 0) {
+                scheduleRetry(resolveContextHighlights);
+                return;
+            }
 
             const topScore = ranked[0].score;
-            const selected = ranked.filter((entry) => entry.score >= topScore * 0.6).slice(0, 10);
-            if (selected.length === 0) return;
+            const selected = ranked.filter((entry) => entry.score >= topScore * 0.75).slice(0, 8);
+            if (selected.length === 0) {
+                scheduleRetry(resolveContextHighlights);
+                return;
+            }
 
             const pageRect = pageElement.getBoundingClientRect();
-            if (pageRect.width <= 0 || pageRect.height <= 0) return;
+            if (pageRect.width <= 0 || pageRect.height <= 0) {
+                scheduleRetry(resolveContextHighlights);
+                return;
+            }
 
             const preciseBoxes = selected.map(({ span }) => {
                 const rect = span.getBoundingClientRect();
@@ -202,15 +199,23 @@ export default function PDFViewer({
             });
 
             const merged = mergeNearbyBoxes(preciseBoxes).slice(0, 6);
-            if (merged.length === 0) return;
+            if (merged.length === 0) {
+                scheduleRetry(resolveContextHighlights);
+                return;
+            }
 
             setContextHighlights((prev) => ({
                 ...prev,
                 [pageNumber]: merged,
             }));
-        }, 220);
+        };
 
-        return () => clearTimeout(timer);
+        resolveContextHighlights();
+
+        return () => {
+            cancelled = true;
+            if (timer) clearTimeout(timer);
+        };
     }, [isOpen, highlightContext, pageNumber, scale, currentPageHighlights]);
 
     const goToPage = (targetPage: number) => {
@@ -381,10 +386,16 @@ export default function PDFViewer({
 
                 <div className="px-6 py-4 border-t border-white/10 bg-white/5 backdrop-blur-md flex justify-between items-center text-sm relative z-10">
                     <div className="flex items-center gap-3">
+                        {suppressCoarseFallback && (
+                            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--c-action)]/10 text-[var(--c-action)] text-xs font-bold border border-[var(--c-action)]/20 shadow-sm">
+                                <span className="w-2 h-2 rounded-full bg-[var(--c-action)] animate-pulse" />
+                                Refining highlight...
+                            </span>
+                        )}
                         {effectivePageHighlights.length > 0 && (
                             <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--c-action)]/10 text-[var(--c-action)] text-xs font-bold border border-[var(--c-action)]/20 shadow-sm">
                                 <span className="w-2 h-2 rounded-full bg-[var(--c-action)] animate-pulse" />
-                                {effectivePageHighlights.length} highlights found
+                                {effectivePageHighlights.length} highlights found ({highlightMode})
                             </span>
                         )}
                     </div>
