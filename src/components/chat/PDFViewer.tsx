@@ -147,23 +147,22 @@ export default function PDFViewer({ url, isOpen, onClose, title, highlights = []
 
                         <div className="h-6 w-px bg-current opacity-10 mx-1" />
 
-                        <Button
-                            variant="ghost"
-                            size="icon"
+                        <button
+                            type="button"
                             onClick={() => setIsFullscreen((prev) => !prev)}
-                            className="hidden md:flex h-9 w-9 rounded-full hover:bg-white/20 text-[var(--c-content)]/80"
+                            className="hidden md:flex h-9 w-9 items-center justify-center rounded-full border-0 bg-transparent hover:bg-white/20 text-[var(--c-content)]/80 transition-colors"
                         >
                             {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-                        </Button>
+                        </button>
 
-                        <Button
-                            variant="ghost"
-                            size="icon"
+                        <button
+                            type="button"
                             onClick={onClose}
-                            className="h-9 w-9 rounded-full hover:bg-red-500/20 hover:text-red-600"
+                            className="h-9 w-9 rounded-full border-0 bg-transparent flex items-center justify-center text-[var(--c-content)]/80 hover:bg-red-500/20 hover:text-red-600 transition-colors"
+                            aria-label="Close document preview"
                         >
                             <X size={20} />
-                        </Button>
+                        </button>
                     </div>
                 </div>
 

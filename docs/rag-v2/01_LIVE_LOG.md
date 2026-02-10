@@ -68,3 +68,20 @@ Append-only execution log for `RAG v2 (Slang-aware Context Graph Memory)`.
   - database migration `0003_pdf_viewer_metadata.sql` must be applied before relying on new columns in production
 - Next action:
   - run `npx tsc --noEmit --incremental false`, `npm run lint`, `npm run test:run`
+
+- Change made:
+  - removed ugly square border/texture around close `X` buttons in modal UI:
+    - tuned `PDFViewer` header close/fullscreen buttons to pure circular icon buttons
+    - tuned shared `Dialog` close control (`DialogPrimitive.Close`) to circular transparent style without square accent background
+- Files touched:
+  - `src/components/chat/PDFViewer.tsx`
+  - `src/components/ui/dialog.tsx`
+  - `docs/rag-v2/01_LIVE_LOG.md`
+- Verification run:
+  - `npm run lint` passed
+- Result:
+  - close icon styling now renders cleanly without the previous square edge
+- New risk or blocker:
+  - none
+- Next action:
+  - visual smoke in production (Settings modal + PDF viewer close controls)
