@@ -21,14 +21,72 @@ interface PDFViewerProps {
     title?: string;
     highlights?: { page: number; bbox: BoundingBox }[];
     initialPage?: number;
+    highlightContext?: string;
 }
 
-export default function PDFViewer({ url, isOpen, onClose, title, highlights = [], initialPage = 1 }: PDFViewerProps) {
+function normalizeText(value: string): string {
+    return value
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function isCoarseHighlight(boxes: BoundingBox[]): boolean {
+    if (boxes.length !== 1) return false;
+    const box = boxes[0];
+    return box.width * box.height > 0.2 || box.height > 0.25 || box.width > 0.8;
+}
+
+function mergeNearbyBoxes(boxes: BoundingBox[]): BoundingBox[] {
+    if (boxes.length <= 1) return boxes;
+
+    const sorted = [...boxes].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    const merged: BoundingBox[] = [];
+
+    for (const box of sorted) {
+        const last = merged[merged.length - 1];
+        if (!last) {
+            merged.push({ ...box });
+            continue;
+        }
+
+        const similarRow = Math.abs(last.y - box.y) < 0.02 && Math.abs(last.height - box.height) < 0.03;
+        const touching = box.x <= last.x + last.width + 0.03;
+        if (similarRow && touching) {
+            const minX = Math.min(last.x, box.x);
+            const maxX = Math.max(last.x + last.width, box.x + box.width);
+            const minY = Math.min(last.y, box.y);
+            const maxY = Math.max(last.y + last.height, box.y + box.height);
+            last.x = minX;
+            last.y = minY;
+            last.width = maxX - minX;
+            last.height = maxY - minY;
+            continue;
+        }
+
+        merged.push({ ...box });
+    }
+
+    return merged;
+}
+
+export default function PDFViewer({
+    url,
+    isOpen,
+    onClose,
+    title,
+    highlights = [],
+    initialPage = 1,
+    highlightContext = '',
+}: PDFViewerProps) {
     const [numPages, setNumPages] = useState(0);
     const [pageNumber, setPageNumber] = useState(initialPage);
     const [scale, setScale] = useState(1.0);
     const [containerWidth, setContainerWidth] = useState(0);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [contextHighlights, setContextHighlights] = useState<Record<number, BoundingBox[]>>({});
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -64,9 +122,13 @@ export default function PDFViewer({ url, isOpen, onClose, title, highlights = []
     }, [containerWidth]);
 
     const currentPageHighlights = useMemo(
-        () => highlights.filter((highlight) => highlight.page === pageNumber),
+        () => highlights.filter((highlight) => highlight.page === pageNumber).map((highlight) => highlight.bbox),
         [highlights, pageNumber],
     );
+
+    const effectivePageHighlights = contextHighlights[pageNumber]?.length
+        ? contextHighlights[pageNumber]
+        : currentPageHighlights;
 
     const scrollToPage = (targetPage: number, behavior: ScrollBehavior = 'smooth') => {
         const container = scrollContainerRef.current;
@@ -82,6 +144,74 @@ export default function PDFViewer({ url, isOpen, onClose, title, highlights = []
         const timer = setTimeout(() => scrollToPage(pageNumber, 'auto'), 80);
         return () => clearTimeout(timer);
     }, [isOpen, pageNumber, numPages]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (!highlightContext.trim()) return;
+        if (!isCoarseHighlight(currentPageHighlights)) return;
+
+        const timer = setTimeout(() => {
+            const pageWrapper = pageRefs.current.get(pageNumber);
+            if (!pageWrapper) return;
+
+            const pageElement = pageWrapper.querySelector('.react-pdf__Page') as HTMLElement | null;
+            const textLayer = pageWrapper.querySelector('.react-pdf__Page__textContent') as HTMLElement | null;
+            if (!pageElement || !textLayer) return;
+
+            const contextTokens = new Set(
+                normalizeText(highlightContext)
+                    .split(' ')
+                    .filter((token) => token.length >= 3),
+            );
+            if (contextTokens.size === 0) return;
+
+            const spans = Array.from(textLayer.querySelectorAll('span')) as HTMLSpanElement[];
+            const ranked = spans
+                .map((span) => {
+                    const text = (span.textContent || '').trim();
+                    if (!text) return null;
+                    const tokens = normalizeText(text).split(' ').filter((token) => token.length >= 3);
+                    if (tokens.length === 0) return null;
+                    const overlapCount = tokens.filter((token) => contextTokens.has(token)).length;
+                    if (overlapCount === 0) return null;
+                    return {
+                        span,
+                        score: overlapCount / tokens.length,
+                    };
+                })
+                .filter((entry): entry is { span: HTMLSpanElement; score: number } => Boolean(entry))
+                .sort((a, b) => b.score - a.score);
+
+            if (ranked.length === 0) return;
+
+            const topScore = ranked[0].score;
+            const selected = ranked.filter((entry) => entry.score >= topScore * 0.6).slice(0, 10);
+            if (selected.length === 0) return;
+
+            const pageRect = pageElement.getBoundingClientRect();
+            if (pageRect.width <= 0 || pageRect.height <= 0) return;
+
+            const preciseBoxes = selected.map(({ span }) => {
+                const rect = span.getBoundingClientRect();
+                return {
+                    x: Math.max(0, Math.min(1, (rect.left - pageRect.left) / pageRect.width)),
+                    y: Math.max(0, Math.min(1, (rect.top - pageRect.top) / pageRect.height)),
+                    width: Math.max(0, Math.min(1, rect.width / pageRect.width)),
+                    height: Math.max(0, Math.min(1, rect.height / pageRect.height)),
+                };
+            });
+
+            const merged = mergeNearbyBoxes(preciseBoxes).slice(0, 6);
+            if (merged.length === 0) return;
+
+            setContextHighlights((prev) => ({
+                ...prev,
+                [pageNumber]: merged,
+            }));
+        }, 220);
+
+        return () => clearTimeout(timer);
+    }, [isOpen, highlightContext, pageNumber, scale, currentPageHighlights]);
 
     const goToPage = (targetPage: number) => {
         if (numPages === 0) return;
@@ -208,7 +338,9 @@ export default function PDFViewer({ url, isOpen, onClose, title, highlights = []
                         >
                             {Array.from({ length: numPages }, (_, index) => {
                                 const renderedPage = index + 1;
-                                const pageHighlights = highlights.filter((highlight) => highlight.page === renderedPage);
+                                const pageHighlights = renderedPage === pageNumber
+                                    ? effectivePageHighlights
+                                    : highlights.filter((highlight) => highlight.page === renderedPage).map((highlight) => highlight.bbox);
                                 return (
                                     <div
                                         key={renderedPage}
@@ -233,10 +365,10 @@ export default function PDFViewer({ url, isOpen, onClose, title, highlights = []
                                                 key={`${renderedPage}-${idx}`}
                                                 className="absolute bg-[var(--c-action)]/20 border-2 border-[var(--c-action)] rounded-sm animate-pulse z-10 pointer-events-none mix-blend-multiply dark:mix-blend-screen"
                                                 style={{
-                                                    left: `${highlight.bbox.x * 100}%`,
-                                                    top: `${highlight.bbox.y * 100}%`,
-                                                    width: `${highlight.bbox.width * 100}%`,
-                                                    height: `${highlight.bbox.height * 100}%`,
+                                                    left: `${highlight.x * 100}%`,
+                                                    top: `${highlight.y * 100}%`,
+                                                    width: `${highlight.width * 100}%`,
+                                                    height: `${highlight.height * 100}%`,
                                                 }}
                                             />
                                         ))}
@@ -249,10 +381,10 @@ export default function PDFViewer({ url, isOpen, onClose, title, highlights = []
 
                 <div className="px-6 py-4 border-t border-white/10 bg-white/5 backdrop-blur-md flex justify-between items-center text-sm relative z-10">
                     <div className="flex items-center gap-3">
-                        {currentPageHighlights.length > 0 && (
+                        {effectivePageHighlights.length > 0 && (
                             <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--c-action)]/10 text-[var(--c-action)] text-xs font-bold border border-[var(--c-action)]/20 shadow-sm">
                                 <span className="w-2 h-2 rounded-full bg-[var(--c-action)] animate-pulse" />
-                                {currentPageHighlights.length} highlights found
+                                {effectivePageHighlights.length} highlights found
                             </span>
                         )}
                     </div>

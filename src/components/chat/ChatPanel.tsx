@@ -136,13 +136,18 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
     const [isPdfOpen, setIsPdfOpen] = useState(false);
     const [initialPage, setInitialPage] = useState<number>(1);
     const [highlights, setHighlights] = useState<Array<{ page: number; bbox: NonNullable<Source['boundingBox']> }>>([]);
+    const [highlightContext, setHighlightContext] = useState<string>('');
+
+    const normalizeDisplayFilename = (name: string): string => {
+        const basename = name.split(/[/\\]/).pop() || name;
+        return basename.replace(/^[^_]+_[0-9a-fA-F-]{36}_/, '');
+    };
 
     const getDisplayFilename = (source: CitationPayload): string => {
-        const preferred = source.originalFilename || source.title;
-        if (preferred && preferred.trim().length > 0) return preferred;
-        const raw = source.filename || 'Document';
+        const raw = source.originalFilename || source.title || source.filename || 'Document';
+        if (!raw.trim()) return 'Document';
         const basename = raw.split(/[/\\]/).pop() || raw;
-        return basename.replace(/^[^_]+_[0-9a-fA-F-]{36}_/, '');
+        return normalizeDisplayFilename(basename);
     };
 
     const onCitationSelect = (source: CitationPayload) => {
@@ -173,6 +178,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
             }
             setPdfTitle(getDisplayFilename(source));
             setInitialPage(source.pageNumber || 1);
+            setHighlightContext(source.contextText?.trim() || '');
 
             // Set highlight boxes with fallback to the coarse chunk bounding box.
             if (source.highlightBoxes && source.highlightBoxes.length > 0) {
@@ -636,6 +642,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                 title={pdfTitle}
                 initialPage={initialPage}
                 highlights={highlights}
+                highlightContext={highlightContext}
             />
         </div>
     );

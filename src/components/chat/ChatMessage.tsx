@@ -17,6 +17,17 @@ interface Source {
     title?: string;
 }
 
+function extractCitationContext(content: string, citationIndex: number): string {
+    const left = content.slice(0, citationIndex);
+    const sentenceBoundary = Math.max(
+        left.lastIndexOf('\n'),
+        left.lastIndexOf('.'),
+        left.lastIndexOf('!'),
+        left.lastIndexOf('?'),
+    );
+    return left.slice(Math.max(0, sentenceBoundary + 1)).trim().slice(-240);
+}
+
 interface ChatMessageProps {
     message: {
         id: string;
@@ -49,6 +60,7 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
             const source = message.sources.find(s => s.id === citationId);
 
             if (source) {
+                const contextText = extractCitationContext(message.content, match.index);
                 parts.push(
                     <CitationLink
                         key={`citation-${match.index}`}
@@ -60,6 +72,7 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
                         filename={source.filename ?? source.title}
                         originalFilename={source.originalFilename ?? source.filename ?? source.title}
                         title={source.title}
+                        contextText={contextText}
                         onCitationClick={onCitationClick}
                     />
                 );
@@ -132,6 +145,7 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
                                     filename={source.filename ?? source.title}
                                     originalFilename={source.originalFilename ?? source.filename ?? source.title}
                                     title={source.title}
+                                    contextText={source.content}
                                     onCitationClick={onCitationClick}
                                 />
                             ))}

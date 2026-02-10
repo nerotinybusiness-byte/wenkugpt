@@ -85,3 +85,27 @@ Append-only execution log for `RAG v2 (Slang-aware Context Graph Memory)`.
   - none
 - Next action:
   - visual smoke in production (Settings modal + PDF viewer close controls)
+
+- Change made:
+  - fixed PDF viewer citation precision fallback for coarse highlights:
+    - when stored bbox is too broad, viewer now uses citation context text and `react-pdf` text layer span matching to compute tighter overlay boxes
+    - this reduces page-wide green overlays for targeted answers (e.g., address lines)
+  - fixed title normalization path in citation flow:
+    - display filename normalization now runs consistently for `originalFilename/title/filename` fallback order
+  - added citation context propagation (`ChatMessage` -> `CitationLink` -> `ChatPanel` -> `PDFViewer`)
+- Files touched:
+  - `src/components/chat/CitationLink.tsx`
+  - `src/components/chat/ChatMessage.tsx`
+  - `src/components/chat/ChatPanel.tsx`
+  - `src/components/chat/PDFViewer.tsx`
+  - `docs/rag-v2/01_LIVE_LOG.md`
+- Verification run:
+  - `npx tsc --noEmit --incremental false` passed
+  - `npm run lint` passed
+  - `npm run test:run` passed
+- Result:
+  - filename in PDF header is cleaner and coarse citation highlights are narrowed by context-aware text matching
+- New risk or blocker:
+  - text-layer matching quality depends on PDF text extraction fidelity
+- Next action:
+  - production smoke on problematic citation case (`kde je sklad wenku?`)

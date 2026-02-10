@@ -17,6 +17,7 @@ export interface CitationPayload {
     filename?: string;
     originalFilename?: string | null;
     title?: string;
+    contextText?: string;
 }
 
 interface CitationLinkProps {
@@ -36,6 +37,8 @@ interface CitationLinkProps {
     originalFilename?: string | null;
     /** Source title (legacy fallback) */
     title?: string;
+    /** Nearby answer text around the citation marker (used for precise text-layer highlight) */
+    contextText?: string;
     /** Callback when citation is clicked */
     onCitationClick?: (citation: CitationPayload) => void;
 }
@@ -49,6 +52,7 @@ export default function CitationLink({
     filename,
     originalFilename,
     title,
+    contextText,
     onCitationClick,
 }: CitationLinkProps) {
     const handleClick = useCallback(() => {
@@ -62,8 +66,9 @@ export default function CitationLink({
             filename,
             originalFilename,
             title,
+            contextText,
         });
-    }, [id, chunkId, pageNumber, boundingBox, highlightBoxes, filename, originalFilename, title, onCitationClick]);
+    }, [id, chunkId, pageNumber, boundingBox, highlightBoxes, filename, originalFilename, title, contextText, onCitationClick]);
 
     return (
         <button
