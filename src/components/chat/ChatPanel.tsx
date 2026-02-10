@@ -33,8 +33,10 @@ interface Source {
     content: string;
     pageNumber: number;
     boundingBox: { x: number; y: number; width: number; height: number } | null;
+    highlightBoxes?: Array<{ x: number; y: number; width: number; height: number }> | null;
     parentHeader: string | null;
     filename?: string;
+    originalFilename?: string | null;
     title?: string;
     relevanceScore: number;
 }
@@ -135,17 +137,25 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
     const [initialPage, setInitialPage] = useState<number>(1);
     const [highlights, setHighlights] = useState<Array<{ page: number; bbox: NonNullable<Source['boundingBox']> }>>([]);
 
+    const getDisplayFilename = (source: CitationPayload): string => {
+        const preferred = source.originalFilename || source.title;
+        if (preferred && preferred.trim().length > 0) return preferred;
+        const raw = source.filename || 'Document';
+        const basename = raw.split(/[/\\]/).pop() || raw;
+        return basename.replace(/^[^_]+_[0-9a-fA-F-]{36}_/, '');
+    };
+
     const onCitationSelect = (source: CitationPayload) => {
         console.log('ChatPanel: Citation clicked', source);
         onCitationClick?.(source);
 
         // Defensive check for filename
-        if (!source || (!source.filename && !source.title)) {
+        if (!source || (!source.filename && !source.title && !source.originalFilename)) {
             console.warn('ChatPanel: Citation has no filename or title', source);
             return;
         }
 
-        const filename = source.filename || source.title || 'Document';
+        const filename = source.filename || source.title || source.originalFilename || 'Document';
 
         if (filename) {
             // Heuristic for PDF handling
@@ -161,14 +171,21 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                     setPdfUrl(`/documents/${filename}`);
                 }
             }
-            setPdfTitle(filename.split(/[/\\]/).pop() || 'Document');
+            setPdfTitle(getDisplayFilename(source));
             setInitialPage(source.pageNumber || 1);
 
-            // Set highlight if bounding box exists
-            if (source.boundingBox) {
+            // Set highlight boxes with fallback to the coarse chunk bounding box.
+            if (source.highlightBoxes && source.highlightBoxes.length > 0) {
+                setHighlights(
+                    source.highlightBoxes.map((bbox) => ({
+                        page: source.pageNumber,
+                        bbox,
+                    }))
+                );
+            } else if (source.boundingBox) {
                 setHighlights([{
                     page: source.pageNumber,
-                    bbox: source.boundingBox
+                    bbox: source.boundingBox,
                 }]);
             } else {
                 setHighlights([]);

@@ -13,7 +13,9 @@ export interface CitationPayload {
     chunkId: string;
     pageNumber: number;
     boundingBox: { x: number; y: number; width: number; height: number } | null;
+    highlightBoxes?: Array<{ x: number; y: number; width: number; height: number }> | null;
     filename?: string;
+    originalFilename?: string | null;
     title?: string;
 }
 
@@ -26,8 +28,12 @@ interface CitationLinkProps {
     pageNumber: number;
     /** Bounding box coordinates */
     boundingBox: { x: number; y: number; width: number; height: number } | null;
+    /** Fine-grained highlight boxes */
+    highlightBoxes?: Array<{ x: number; y: number; width: number; height: number }> | null;
     /** Source filename */
     filename?: string;
+    /** Original document filename for UI */
+    originalFilename?: string | null;
     /** Source title (legacy fallback) */
     title?: string;
     /** Callback when citation is clicked */
@@ -39,7 +45,9 @@ export default function CitationLink({
     chunkId,
     pageNumber,
     boundingBox,
+    highlightBoxes,
     filename,
+    originalFilename,
     title,
     onCitationClick,
 }: CitationLinkProps) {
@@ -50,10 +58,12 @@ export default function CitationLink({
             chunkId,
             pageNumber,
             boundingBox,
+            highlightBoxes,
             filename,
+            originalFilename,
             title,
         });
-    }, [id, chunkId, pageNumber, boundingBox, filename, title, onCitationClick]);
+    }, [id, chunkId, pageNumber, boundingBox, highlightBoxes, filename, originalFilename, title, onCitationClick]);
 
     return (
         <button

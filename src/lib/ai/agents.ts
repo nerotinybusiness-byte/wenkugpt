@@ -39,10 +39,14 @@ export interface SourceChunk {
     pageNumber: number;
     /** Bounding box for highlighting */
     boundingBox: { x: number; y: number; width: number; height: number } | null;
+    /** Fine-grained highlight boxes for line/paragraph precision */
+    highlightBoxes?: Array<{ x: number; y: number; width: number; height: number }> | null;
     /** Parent header */
     parentHeader: string | null;
     /** Source filename */
     filename?: string;
+    /** Original display filename */
+    originalFilename?: string | null;
     /** Relevance score */
     relevanceScore: number;
 }
@@ -142,7 +146,7 @@ export const DEFAULT_RAG_CONFIG: RAGConfig = {
  */
 function buildContext(sources: SourceChunk[]): string {
     return sources
-        .map(s => `[${s.citationId}] (${s.filename || 'Unknown'}, p.${s.pageNumber})\n${s.content}`)
+        .map(s => `[${s.citationId}] (${s.originalFilename || s.filename || 'Unknown'}, p.${s.pageNumber})\n${s.content}`)
         .join('\n\n---\n\n');
 }
 
@@ -157,7 +161,7 @@ function buildTruncatedContext(sources: SourceChunk[]): string {
     let totalChars = 0;
 
     for (const s of sources) {
-        const chunkText = `[${s.citationId}] (${s.filename || 'Unknown'}, p.${s.pageNumber})\n${s.content}`;
+        const chunkText = `[${s.citationId}] (${s.originalFilename || s.filename || 'Unknown'}, p.${s.pageNumber})\n${s.content}`;
         if (totalChars + chunkText.length > MAX_CONTEXT_CHARS) {
             break;
         }
@@ -249,8 +253,10 @@ async function agentRetriever(
         content: result.content,
         pageNumber: result.pageNumber,
         boundingBox: result.boundingBox,
+        highlightBoxes: result.highlightBoxes ?? null,
         parentHeader: result.parentHeader,
         filename: result.filename,
+        originalFilename: result.originalFilename ?? null,
         relevanceScore: result.relevanceScore,
     }));
 
@@ -444,8 +450,10 @@ async function executeRAGCore(
                 content: chunk?.content || '',
                 pageNumber: chunk?.pageNumber || c.page,
                 boundingBox: chunk?.boundingBox || null,
+                highlightBoxes: chunk?.highlightBoxes ?? (chunk?.boundingBox ? [chunk.boundingBox] : null),
                 parentHeader: chunk?.parentHeader || null,
                 filename: chunk?.filename,
+                originalFilename: chunk?.originalFilename ?? null,
                 relevanceScore: c.confidence,
             };
         }));

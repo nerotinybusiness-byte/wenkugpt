@@ -138,6 +138,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             userId: auth.user.id,
             accessLevel: options.accessLevel,
             skipEmbedding: options.skipEmbedding,
+            originalFilename: file.name,
         });
 
         return apiSuccess({

@@ -25,6 +25,8 @@ export interface SearchResult {
   pageNumber: number;
   /** Bounding box for Golden Glow highlight */
   boundingBox: { x: number; y: number; width: number; height: number } | null;
+  /** Fine-grained bounding boxes for paragraph/line-level highlighting */
+  highlightBoxes?: Array<{ x: number; y: number; width: number; height: number }> | null;
   /** Parent header hierarchy */
   parentHeader: string | null;
   /** Vector similarity score (0-1, higher is better) */
@@ -37,6 +39,8 @@ export interface SearchResult {
   tokenCount: number;
   /** Source document filename */
   filename?: string;
+  /** Original human-readable document filename */
+  originalFilename?: string | null;
 }
 
 /**
@@ -75,12 +79,14 @@ interface HybridSearchRow {
   content: string;
   page_number: number;
   bounding_box: { x: number; y: number; width: number; height: number } | null;
+  highlight_boxes: Array<{ x: number; y: number; width: number; height: number }> | null;
   parent_header: string | null;
   token_count: number;
   vector_score: number;
   text_score: number;
   combined_score: number;
   filename: string;
+  original_filename: string | null;
 }
 
 /**
@@ -119,6 +125,7 @@ export async function hybridSearch(
         c.content,
         c.page_number,
         c.bounding_box,
+        c.highlight_boxes,
         c.parent_header,
         c.token_count,
         1 - (c.embedding <=> (SELECT embedding FROM query_embedding)) AS vector_score
@@ -145,12 +152,14 @@ export async function hybridSearch(
       v.content,
       v.page_number,
       v.bounding_box,
+      v.highlight_boxes,
       v.parent_header,
       v.token_count,
       v.vector_score,
       COALESCE(t.text_score, 0) AS text_score,
       (${vectorWeight} * v.vector_score + ${textWeight} * COALESCE(t.text_score, 0)) AS combined_score,
-      d.filename
+      d.filename,
+      d.original_filename
     FROM vector_search v
     LEFT JOIN text_search t ON v.id = t.id
     JOIN ${documents} d ON v.document_id = d.id
@@ -171,12 +180,14 @@ export async function hybridSearch(
     content: row.content,
     pageNumber: row.page_number,
     boundingBox: row.bounding_box,
+    highlightBoxes: row.highlight_boxes,
     parentHeader: row.parent_header,
     vectorScore: Number(row.vector_score),
     textScore: Number(row.text_score),
     combinedScore: Number(row.combined_score),
     tokenCount: row.token_count,
     filename: row.filename,
+    originalFilename: row.original_filename,
   }));
 }
 
@@ -197,10 +208,12 @@ export async function vectorSearch(
       c.content,
       c.page_number,
       c.bounding_box,
+      c.highlight_boxes,
       c.parent_header,
       c.token_count,
       1 - (c.embedding <=> ${sql.raw(embeddingStr)}) AS vector_score,
-      d.filename
+      d.filename,
+      d.original_filename
     FROM ${chunks} c
     JOIN ${documents} d ON c.document_id = d.id
     WHERE d.processing_status = 'completed'
@@ -216,22 +229,26 @@ export async function vectorSearch(
     content: string;
     page_number: number;
     bounding_box: { x: number; y: number; width: number; height: number } | null;
+    highlight_boxes: Array<{ x: number; y: number; width: number; height: number }> | null;
     parent_header: string | null;
     token_count: number;
     vector_score: number;
     filename: string;
+    original_filename: string | null;
   }>).map(row => ({
     id: row.id,
     documentId: row.document_id,
     content: row.content,
     pageNumber: row.page_number,
     boundingBox: row.bounding_box,
+    highlightBoxes: row.highlight_boxes,
     parentHeader: row.parent_header,
     vectorScore: Number(row.vector_score),
     textScore: 0,
     combinedScore: Number(row.vector_score),
     tokenCount: row.token_count,
     filename: row.filename,
+    originalFilename: row.original_filename,
   }));
 }
 
@@ -246,9 +263,11 @@ export async function getChunkById(chunkId: string): Promise<SearchResult | null
       c.content,
       c.page_number,
       c.bounding_box,
+      c.highlight_boxes,
       c.parent_header,
       c.token_count,
-      d.filename
+      d.filename,
+      d.original_filename
     FROM ${chunks} c
     JOIN ${documents} d ON c.document_id = d.id
     WHERE c.id = ${chunkId}
@@ -265,9 +284,11 @@ export async function getChunkById(chunkId: string): Promise<SearchResult | null
     content: string;
     page_number: number;
     bounding_box: { x: number; y: number; width: number; height: number } | null;
+    highlight_boxes: Array<{ x: number; y: number; width: number; height: number }> | null;
     parent_header: string | null;
     token_count: number;
     filename: string;
+    original_filename: string | null;
   };
   return {
     id: row.id,
@@ -275,11 +296,13 @@ export async function getChunkById(chunkId: string): Promise<SearchResult | null
     content: row.content,
     pageNumber: row.page_number,
     boundingBox: row.bounding_box,
+    highlightBoxes: row.highlight_boxes,
     parentHeader: row.parent_header,
     vectorScore: 1,
     textScore: 0,
     combinedScore: 1,
     tokenCount: row.token_count,
     filename: row.filename,
+    originalFilename: row.original_filename,
   };
 }

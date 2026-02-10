@@ -97,6 +97,7 @@ export const documents = pgTable('documents', {
 
   // File metadata
   filename: varchar('filename', { length: 512 }).notNull(),
+  originalFilename: varchar('original_filename', { length: 512 }),
   fileHash: varchar('file_hash', { length: 64 }).notNull(), // SHA-256 for deduplication
   mimeType: varchar('mime_type', { length: 128 }).notNull(),
   fileSize: integer('file_size').notNull().default(0),
@@ -151,6 +152,7 @@ export const chunks = pgTable('chunks', {
   // Position metadata
   pageNumber: integer('page_number').notNull(),
   boundingBox: jsonb('bounding_box').$type<BoundingBox>(), // Normalized 0.0-1.0
+  highlightBoxes: jsonb('highlight_boxes').$type<BoundingBox[]>(),
   parentHeader: varchar('parent_header', { length: 512 }), // e.g., "## Section > ### Subsection"
   chunkIndex: integer('chunk_index').notNull(), // Order within document
 
@@ -523,8 +525,10 @@ export interface MessageSource {
   pageNumber?: number | null;
   title?: string | null;
   filename?: string | null;
+  originalFilename?: string | null;
   content?: string;
   boundingBox?: BoundingBox | null;
+  highlightBoxes?: BoundingBox[] | null;
   parentHeader?: string | null;
   relevanceScore?: number;
   [key: string]: unknown;

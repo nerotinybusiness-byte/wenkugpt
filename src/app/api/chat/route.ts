@@ -191,8 +191,11 @@ export async function POST(request: NextRequest) {
                 id: s.citationId,
                 documentId: s.documentId,
                 pageNumber: s.pageNumber,
-                title: s.filename,
+                title: s.originalFilename ?? s.filename,
                 filename: s.filename,
+                originalFilename: s.originalFilename ?? s.filename ?? null,
+                boundingBox: s.boundingBox,
+                highlightBoxes: s.highlightBoxes ?? (s.boundingBox ? [s.boundingBox] : null),
             })),
         });
 
@@ -206,8 +209,10 @@ export async function POST(request: NextRequest) {
                 content: s.content.slice(0, 200) + '...',
                 pageNumber: s.pageNumber,
                 boundingBox: s.boundingBox,
+                highlightBoxes: s.highlightBoxes ?? (s.boundingBox ? [s.boundingBox] : null),
                 parentHeader: s.parentHeader,
                 filename: s.filename,
+                originalFilename: s.originalFilename ?? s.filename ?? null,
                 relevanceScore: s.relevanceScore,
             })),
             verified: ragResponse.verified,
@@ -263,6 +268,9 @@ export async function GET(request: NextRequest) {
                 ? msg.sources.map((source) => ({
                     ...source,
                     filename: source.filename ?? source.title ?? null,
+                    originalFilename: source.originalFilename ?? source.filename ?? source.title ?? null,
+                    highlightBoxes: source.highlightBoxes
+                        ?? (source.boundingBox ? [source.boundingBox] : null),
                 }))
                 : null;
 

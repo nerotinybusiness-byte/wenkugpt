@@ -10,8 +10,10 @@ interface Source {
     chunkId: string;
     pageNumber: number;
     boundingBox: { x: number; y: number; width: number; height: number } | null;
+    highlightBoxes?: Array<{ x: number; y: number; width: number; height: number }> | null;
     content: string;
     filename?: string;
+    originalFilename?: string | null;
     title?: string;
 }
 
@@ -54,7 +56,9 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
                         chunkId={source.chunkId}
                         pageNumber={source.pageNumber}
                         boundingBox={source.boundingBox}
+                        highlightBoxes={source.highlightBoxes}
                         filename={source.filename ?? source.title}
+                        originalFilename={source.originalFilename ?? source.filename ?? source.title}
                         title={source.title}
                         onCitationClick={onCitationClick}
                     />
@@ -124,7 +128,9 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
                                     chunkId={source.chunkId}
                                     pageNumber={source.pageNumber}
                                     boundingBox={source.boundingBox}
+                                    highlightBoxes={source.highlightBoxes}
                                     filename={source.filename ?? source.title}
+                                    originalFilename={source.originalFilename ?? source.filename ?? source.title}
                                     title={source.title}
                                     onCitationClick={onCitationClick}
                                 />

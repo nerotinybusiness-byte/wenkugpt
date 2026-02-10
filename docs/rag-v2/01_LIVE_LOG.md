@@ -35,3 +35,36 @@ Append-only execution log for `RAG v2 (Slang-aware Context Graph Memory)`.
   - runtime browser validation for new v2 context controls still pending
 - Next action:
   - run browser checklist for `v2` (scope/effectiveAt/ambiguity behavior) and collect telemetry samples
+
+- Change made:
+  - implemented PDF viewer hardening pass:
+    - default zoom switched to `100%`
+    - continuous vertical scrolling across all pages
+    - document title now prefers human-readable `originalFilename`
+    - highlight payload extended for fine-grained `highlightBoxes[]` with fallback to legacy `boundingBox`
+  - implemented data-path support for precise highlights and display names:
+    - schema columns `documents.original_filename` and `chunks.highlight_boxes`
+    - migration `drizzle/0003_pdf_viewer_metadata.sql`
+    - ingest path now passes/stores original filename
+    - retrieval/API payload now includes `originalFilename` + `highlightBoxes`
+- Files touched:
+  - `src/lib/db/schema.ts`
+  - `drizzle/0003_pdf_viewer_metadata.sql`
+  - `drizzle/meta/_journal.json`
+  - `src/app/api/ingest/route.ts`
+  - `src/lib/ingest/pipeline.ts`
+  - `src/lib/db/queries.ts`
+  - `src/lib/ai/agents.ts`
+  - `src/app/api/chat/route.ts`
+  - `src/components/chat/CitationLink.tsx`
+  - `src/components/chat/ChatMessage.tsx`
+  - `src/components/chat/ChatPanel.tsx`
+  - `src/components/chat/PDFViewer.tsx`
+- Verification run:
+  - pending
+- Result:
+  - implementation complete, awaiting type/lint/test verification
+- New risk or blocker:
+  - database migration `0003_pdf_viewer_metadata.sql` must be applied before relying on new columns in production
+- Next action:
+  - run `npx tsc --noEmit --incremental false`, `npm run lint`, `npm run test:run`

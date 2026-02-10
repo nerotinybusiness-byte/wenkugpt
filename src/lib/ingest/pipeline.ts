@@ -10,7 +10,7 @@ import { logResidencyStatus } from '@/lib/config/regions';
 import CryptoJS from 'crypto-js';
 import fs from 'fs/promises';
 import { db } from '@/lib/db';
-import { documents, chunks as chunksTable } from '@/lib/db/schema';
+import { documents, chunks as chunksTable, type BoundingBox } from '@/lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { devLog, logError } from '@/lib/logger';
 import { getRagV2Flags } from '@/lib/rag-v2/flags';
@@ -52,6 +52,42 @@ function sha256(content: string | Buffer | Uint8Array): string {
     return CryptoJS.SHA256(data).toString(CryptoJS.enc.Hex);
 }
 
+function normalizeDisplayFilename(filename: string): string {
+    const basename = filename.split(/[/\\]/).pop() || filename;
+    // Stored files are typically "<userId>_<uuid>_<safeOriginalName>".
+    return basename.replace(/^[^_]+_[0-9a-fA-F-]{36}_/, '');
+}
+
+function buildHighlightBoxes(chunk: SemanticChunk): BoundingBox[] | null {
+    const sourceBlocks = (chunk as SemanticChunk & { sourceBlocks?: Array<{ bbox: BoundingBox }> }).sourceBlocks;
+    if (!Array.isArray(sourceBlocks) || sourceBlocks.length === 0) {
+        return chunk.bbox ? [chunk.bbox] : null;
+    }
+
+    const dedup = new Map<string, BoundingBox>();
+    for (const block of sourceBlocks) {
+        const bbox = block?.bbox;
+        if (!bbox) continue;
+        const key = [
+            bbox.x.toFixed(4),
+            bbox.y.toFixed(4),
+            bbox.width.toFixed(4),
+            bbox.height.toFixed(4),
+        ].join(':');
+        if (!dedup.has(key)) dedup.set(key, bbox);
+    }
+
+    const boxes = [...dedup.values()]
+        .sort((a, b) => (a.y - b.y) || (a.x - b.x))
+        .slice(0, 32);
+
+    if (boxes.length === 0) {
+        return chunk.bbox ? [chunk.bbox] : null;
+    }
+
+    return boxes;
+}
+
 /**
  * Process a document through the full ingestion pipeline
  * 
@@ -70,6 +106,7 @@ export async function processPipeline(
         accessLevel?: 'public' | 'private' | 'team';
         skipEmbedding?: boolean;
         skipStorage?: boolean;
+        originalFilename?: string;
     } = {}
 ): Promise<PipelineResult> {
     const startTime = performance.now();
@@ -180,6 +217,7 @@ export async function processPipeline(
                 const [doc] = await tx.insert(documents).values({
                     userId: userId!,
                     filename,
+                    originalFilename: options.originalFilename || normalizeDisplayFilename(filename),
                     fileHash,
                     mimeType,
                     fileSize: buffer.length,
@@ -199,6 +237,7 @@ export async function processPipeline(
                     embedding: chunkEmbeddings[index],
                     pageNumber: chunk.page,
                     boundingBox: chunk.bbox,
+                    highlightBoxes: buildHighlightBoxes(chunk),
                     parentHeader: chunk.parentHeader || null,
                     chunkIndex: index,
                     tokenCount: chunk.tokenCount,
