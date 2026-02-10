@@ -7,15 +7,28 @@
 
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
-import { executeRAG, type RAGConfig } from '@/lib/ai/agents';
+import { executeRAG, type RAGConfig, type RAGEngineId } from '@/lib/ai/agents';
 import { requireUser } from '@/lib/auth/request-auth';
 import { getRequestId, logError } from '@/lib/logger';
 import type { MessageSource } from '@/lib/db/schema';
 import { apiError, apiSuccess } from '@/lib/api/response';
+import { isRagV2KillSwitchEnabled } from '@/lib/rag-v2/flags';
+import type { AmbiguityPolicy, ContextScope } from '@/lib/rag-v2/types';
 
 const DEFAULT_GENERATOR_MODEL = 'gemini-2.5-flash';
+const DEFAULT_RAG_ENGINE: RAGEngineId = 'v1';
+const DEFAULT_AMBIGUITY_POLICY: AmbiguityPolicy = 'show_both';
 const SUPPORTED_GENERATOR_MODELS = new Set([
     'gemini-2.5-flash',
+]);
+const SUPPORTED_RAG_ENGINES = new Set<RAGEngineId>([
+    'v1',
+    'v2',
+]);
+const SUPPORTED_AMBIGUITY_POLICIES = new Set<AmbiguityPolicy>([
+    'ask',
+    'show_both',
+    'strict',
 ]);
 
 function resolveGeneratorModel(model?: string): string {
@@ -23,9 +36,68 @@ function resolveGeneratorModel(model?: string): string {
     return SUPPORTED_GENERATOR_MODELS.has(model) ? model : DEFAULT_GENERATOR_MODEL;
 }
 
+function resolveRagEngine(engine?: string): RAGEngineId {
+    if (!engine) return DEFAULT_RAG_ENGINE;
+    return SUPPORTED_RAG_ENGINES.has(engine as RAGEngineId)
+        ? (engine as RAGEngineId)
+        : DEFAULT_RAG_ENGINE;
+}
+
+function resolveAmbiguityPolicy(policy?: string): AmbiguityPolicy {
+    if (!policy) return DEFAULT_AMBIGUITY_POLICY;
+    return SUPPORTED_AMBIGUITY_POLICIES.has(policy as AmbiguityPolicy)
+        ? (policy as AmbiguityPolicy)
+        : DEFAULT_AMBIGUITY_POLICY;
+}
+
+function sanitizeScopeValue(value?: string): string | undefined {
+    if (!value) return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function resolveContextScope(scope?: {
+    team?: string;
+    product?: string;
+    region?: string;
+    process?: string;
+}): ContextScope | undefined {
+    if (!scope) return undefined;
+
+    const resolved: ContextScope = {
+        team: sanitizeScopeValue(scope.team),
+        product: sanitizeScopeValue(scope.product),
+        region: sanitizeScopeValue(scope.region),
+        process: sanitizeScopeValue(scope.process),
+    };
+
+    if (!resolved.team && !resolved.product && !resolved.region && !resolved.process) {
+        return undefined;
+    }
+
+    return resolved;
+}
+
+function resolveEffectiveAt(value?: string): string | undefined {
+    if (!value) return undefined;
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? undefined : trimmed;
+}
+
 const ChatRequestSchema = z.object({
     query: z.string().min(1).max(2000),
     settings: z.object({
+        ragEngine: z.string().optional(),
+        contextScope: z.object({
+            team: z.string().optional(),
+            product: z.string().optional(),
+            region: z.string().optional(),
+            process: z.string().optional(),
+        }).optional(),
+        effectiveAt: z.string().optional(),
+        ambiguityPolicy: z.string().optional(),
         vectorWeight: z.number().optional(),
         textWeight: z.number().optional(),
         minScore: z.number().optional(),
@@ -86,7 +158,14 @@ export async function POST(request: NextRequest) {
             content: query,
         });
 
+        const requestedEngine = resolveRagEngine(settings?.ragEngine);
+        const ragEngine = isRagV2KillSwitchEnabled() ? 'v1' : requestedEngine;
+
         const ragConfig: Partial<RAGConfig> = {
+            ragEngine,
+            contextScope: resolveContextScope(settings?.contextScope),
+            effectiveAt: resolveEffectiveAt(settings?.effectiveAt),
+            ambiguityPolicy: resolveAmbiguityPolicy(settings?.ambiguityPolicy),
             search: {
                 limit: settings?.searchLimit ?? 20,
                 minScore: settings?.minScore ?? 0.3,
@@ -102,7 +181,7 @@ export async function POST(request: NextRequest) {
             skipVerification: settings?.enableAuditor === false,
         };
 
-        const ragResponse = await executeRAG(query, ragConfig as RAGConfig);
+        const ragResponse = await executeRAG(query, ragConfig);
 
         await db.insert(messages).values({
             chatId: chatId!,
@@ -134,6 +213,9 @@ export async function POST(request: NextRequest) {
             verified: ragResponse.verified,
             confidence: ragResponse.verification.confidence,
             stats: ragResponse.stats,
+            interpretation: ragResponse.interpretation,
+            ambiguities: ragResponse.ambiguities,
+            engineMeta: ragResponse.engineMeta,
         });
     } catch (error) {
         const requestId = getRequestId(request);

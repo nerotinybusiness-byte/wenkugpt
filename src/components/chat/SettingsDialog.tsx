@@ -21,14 +21,27 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Settings, RotateCcw } from "lucide-react";
-import { useSettings, GEMINI_MODELS, CLAUDE_MODELS } from "@/lib/settings/store";
+import {
+    useSettings,
+    RAG_ENGINES,
+    AMBIGUITY_POLICIES,
+    GEMINI_MODELS,
+    CLAUDE_MODELS,
+    type RAGEngineId,
+    type AmbiguityPolicyId,
+} from "@/lib/settings/store";
 import { useState } from "react";
 import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from "next-themes";
 
 export function SettingsDialog() {
     const settings = useSettings(useShallow((state) => ({
+        ragEngine: state.ragEngine,
+        contextScope: state.contextScope,
+        effectiveAt: state.effectiveAt,
+        ambiguityPolicy: state.ambiguityPolicy,
         generatorModel: state.generatorModel,
         auditorModel: state.auditorModel,
         enableAuditor: state.enableAuditor,
@@ -37,6 +50,10 @@ export function SettingsDialog() {
         vectorWeight: state.vectorWeight,
         textWeight: state.textWeight,
         confidenceThreshold: state.confidenceThreshold,
+        setRagEngine: state.setRagEngine,
+        setContextScopeField: state.setContextScopeField,
+        setEffectiveAt: state.setEffectiveAt,
+        setAmbiguityPolicy: state.setAmbiguityPolicy,
         setGeneratorModel: state.setGeneratorModel,
         setAuditorModel: state.setAuditorModel,
         setEnableAuditor: state.setEnableAuditor,
@@ -99,6 +116,26 @@ export function SettingsDialog() {
                         </h3>
 
                         <div className="grid gap-4 md:grid-cols-2">
+                            {/* RAG Engine */}
+                            <div className="space-y-2 md:col-span-2">
+                                <Label htmlFor="rag-engine" className={textColor}>RAG Engine</Label>
+                                <Select value={settings.ragEngine} onValueChange={(value) => settings.setRagEngine(value as RAGEngineId)}>
+                                    <SelectTrigger id="rag-engine" className={`w-full ${isDark ? 'bg-[#27272a] border-[#3f3f46]' : 'bg-[#f4f4f5] border-[#e4e4e7]'} ${textColor}`}>
+                                        <SelectValue placeholder="Select RAG engine" />
+                                    </SelectTrigger>
+                                    <SelectContent position="popper" className={`${bgColor} ${borderColor} ${textColor} shadow-xl max-h-[300px]`}>
+                                        {RAG_ENGINES.map((engine) => (
+                                            <SelectItem key={engine.id} value={engine.id} className="focus:bg-accent focus:text-accent-foreground">
+                                                <div className="flex flex-col items-start text-left py-1">
+                                                    <span className="font-medium text-sm">{engine.name}</span>
+                                                    <span className="text-xs opacity-70">{engine.description}</span>
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
                             {/* Generator Model */}
                             <div className="space-y-2">
                                 <Label htmlFor="generator-model" className={textColor}>Generator (Answer)</Label>
@@ -205,7 +242,85 @@ export function SettingsDialog() {
                         </div>
                     </div>
 
-                    {/* SECTION 3: VERIFICATION */}
+                    {/* SECTION 3: V2 CONTEXT */}
+                    <div className="space-y-4">
+                        <h3 className={`text-sm font-semibold uppercase tracking-wider border-b pb-2 ${subTextColor} ${borderColor}`}>
+                            V2 Context (Scope/Time)
+                        </h3>
+
+                        <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label className={textColor}>Team</Label>
+                                <Input
+                                    value={settings.contextScope.team}
+                                    onChange={(event) => settings.setContextScopeField('team', event.target.value)}
+                                    placeholder="e.g. compliance"
+                                    className={`${isDark ? 'bg-[#27272a] border-[#3f3f46]' : 'bg-[#f4f4f5] border-[#e4e4e7]'} ${textColor}`}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className={textColor}>Product</Label>
+                                <Input
+                                    value={settings.contextScope.product}
+                                    onChange={(event) => settings.setContextScopeField('product', event.target.value)}
+                                    placeholder="e.g. release-gate"
+                                    className={`${isDark ? 'bg-[#27272a] border-[#3f3f46]' : 'bg-[#f4f4f5] border-[#e4e4e7]'} ${textColor}`}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className={textColor}>Region</Label>
+                                <Input
+                                    value={settings.contextScope.region}
+                                    onChange={(event) => settings.setContextScopeField('region', event.target.value)}
+                                    placeholder="e.g. eu"
+                                    className={`${isDark ? 'bg-[#27272a] border-[#3f3f46]' : 'bg-[#f4f4f5] border-[#e4e4e7]'} ${textColor}`}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className={textColor}>Process</Label>
+                                <Input
+                                    value={settings.contextScope.process}
+                                    onChange={(event) => settings.setContextScopeField('process', event.target.value)}
+                                    placeholder="e.g. deploy"
+                                    className={`${isDark ? 'bg-[#27272a] border-[#3f3f46]' : 'bg-[#f4f4f5] border-[#e4e4e7]'} ${textColor}`}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label className={textColor}>Effective At (ISO / datetime-local)</Label>
+                            <Input
+                                type="datetime-local"
+                                value={settings.effectiveAt}
+                                onChange={(event) => settings.setEffectiveAt(event.target.value)}
+                                className={`${isDark ? 'bg-[#27272a] border-[#3f3f46]' : 'bg-[#f4f4f5] border-[#e4e4e7]'} ${textColor}`}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label className={textColor}>Ambiguity Policy</Label>
+                            <Select
+                                value={settings.ambiguityPolicy}
+                                onValueChange={(value) => settings.setAmbiguityPolicy(value as AmbiguityPolicyId)}
+                            >
+                                <SelectTrigger className={`w-full ${isDark ? 'bg-[#27272a] border-[#3f3f46]' : 'bg-[#f4f4f5] border-[#e4e4e7]'} ${textColor}`}>
+                                    <SelectValue placeholder="Select ambiguity policy" />
+                                </SelectTrigger>
+                                <SelectContent position="popper" className={`${bgColor} ${borderColor} ${textColor} shadow-xl max-h-[300px]`}>
+                                    {AMBIGUITY_POLICIES.map((policy) => (
+                                        <SelectItem key={policy.id} value={policy.id} className="focus:bg-accent focus:text-accent-foreground">
+                                            <div className="flex flex-col items-start text-left py-1">
+                                                <span className="font-medium text-sm">{policy.name}</span>
+                                                <span className="text-xs opacity-70">{policy.description}</span>
+                                            </div>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    {/* SECTION 4: VERIFICATION */}
                     <div className="space-y-4">
                         <h3 className={`text-sm font-semibold uppercase tracking-wider border-b pb-2 ${subTextColor} ${borderColor}`}>
                             Verification & Safety
@@ -237,7 +352,7 @@ export function SettingsDialog() {
                         </div>
                     </div>
 
-                    {/* SECTION 4: APPEARANCE */}
+                    {/* SECTION 5: APPEARANCE */}
                     <div className="space-y-4">
                         <h3 className={`text-sm font-semibold uppercase tracking-wider border-b pb-2 ${subTextColor} ${borderColor}`}>
                             Appearance

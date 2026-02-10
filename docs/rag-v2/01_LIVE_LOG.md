@@ -1,0 +1,37 @@
+# RAG v2 Live Log
+
+Append-only execution log for `RAG v2 (Slang-aware Context Graph Memory)`.
+
+## 2026-02-10
+- Change made:
+  - created `docs/rag-v2` documentation skeleton (`00-07`).
+  - implemented `v2` core scaffolding in code:
+    - graph-memory schema tables (`concepts`, aliases, definitions, relationships, evidence, candidates, reviews)
+    - migration `drizzle/0002_rag_v2_graph_memory.sql`
+    - query flow module (`src/lib/rag-v2/query-flow.ts`)
+    - feature flags module (`src/lib/rag-v2/flags.ts`)
+    - ingestion candidate module (`src/lib/rag-v2/ingest.ts`)
+    - API/settings wiring for `contextScope`, `effectiveAt`, `ambiguityPolicy`, `engineMeta`
+- Files touched:
+  - `src/lib/db/schema.ts`
+  - `drizzle/0002_rag_v2_graph_memory.sql`
+  - `drizzle/meta/_journal.json`
+  - `src/lib/rag-v2/*`
+  - `src/lib/ai/agents.ts`
+  - `src/app/api/chat/route.ts`
+  - `src/lib/ingest/pipeline.ts`
+  - `src/lib/settings/store.ts`
+  - `src/components/chat/SettingsDialog.tsx`
+  - `src/components/chat/ChatPanel.tsx`
+  - `README.md`
+  - `docs/api.md`
+- Verification run:
+  - `npx tsc --noEmit --incremental false` passed
+  - `npm run lint` passed
+  - `npm run test:run` passed (32 tests)
+- Result:
+  - baseline implementation complete for v2 graph-memory scaffolding
+- New risk or blocker:
+  - runtime browser validation for new v2 context controls still pending
+- Next action:
+  - run browser checklist for `v2` (scope/effectiveAt/ambiguity behavior) and collect telemetry samples

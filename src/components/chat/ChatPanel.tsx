@@ -90,6 +90,27 @@ interface ChatPostResponseData {
     verified: boolean;
     confidence: number;
     stats?: SettingsState['lastStats'];
+    interpretation?: {
+        detectedTerms: string[];
+        resolvedConcepts: Array<{
+            conceptId: string;
+            conceptKey: string;
+            alias: string;
+            definitionVersionId: string | null;
+            confidence: number;
+        }>;
+        definitionVersionIds: string[];
+        rewrittenQuery?: string;
+    };
+    ambiguities?: Array<{
+        term: string;
+        candidateConcepts: string[];
+        reason: string;
+    }>;
+    engineMeta?: {
+        engine: 'v1' | 'v2';
+        mode: 'compat' | 'graph';
+    };
 }
 
 export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPanelProps) {
@@ -226,6 +247,15 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
             const settings = getSettings();
 
             const settingsPayload = {
+                ragEngine: settings.ragEngine,
+                contextScope: {
+                    team: settings.contextScope.team || undefined,
+                    product: settings.contextScope.product || undefined,
+                    region: settings.contextScope.region || undefined,
+                    process: settings.contextScope.process || undefined,
+                },
+                effectiveAt: settings.effectiveAt || undefined,
+                ambiguityPolicy: settings.ambiguityPolicy,
                 vectorWeight: settings.vectorWeight,
                 textWeight: settings.textWeight,
                 minScore: settings.minScore,
@@ -303,7 +333,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                     if (lastIdx !== -1) {
                         newMessages.splice(lastIdx, 1, {
                             id: `stop-${Date.now()}`,
-                            content: 'Generování bylo zastaveno.',
+                            content: 'Generov\u00E1n\u00ED bylo zastaveno.',
                             isUser: false,
                         });
                     }
@@ -311,13 +341,13 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                 });
             } else {
                 console.error('Chat error:', error);
-                const errorMessage = error instanceof Error ? error.message : 'Neznámá chyba';
+                const errorMessage = error instanceof Error ? error.message : 'Nezn\u00E1m\u00E1 chyba';
                 setMessages(prev => {
                     const newMessages = [...prev];
                     newMessages.pop(); // Remove loading
                     newMessages.push({
                         id: `error-${Date.now()}`,
-                        content: `Došlo k chybě: ${errorMessage}`,
+                        content: `Do\u0161lo k chyb\u011B: ${errorMessage}`,
                         isUser: false,
                     });
                     return newMessages;
@@ -473,7 +503,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                                             <button
                                                 key={chat.id}
                                                 onClick={() => loadChat(chat.id)}
-                                                className="w-full text-left px-4 py-2.5 rounded-lg hover:bg-[var(--c-glass)]/20 transition-colors text-sm text-[var(--c-content)] truncat group"
+                                                className="w-full text-left px-4 py-2.5 rounded-lg hover:bg-[var(--c-glass)]/20 transition-colors text-sm text-[var(--c-content)] truncate group"
                                             >
                                                 <span className="group-hover:text-[var(--c-action)] transition-colors line-clamp-1">
                                                     {chat.title}
@@ -593,3 +623,4 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
         </div>
     );
 }
+

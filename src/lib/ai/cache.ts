@@ -39,6 +39,10 @@ export interface CachedResponse {
     createdAt: Date;
 }
 
+interface CacheOptions {
+    namespace?: string;
+}
+
 /**
  * Normalize query for consistent hashing
  * - Lowercase
@@ -49,12 +53,21 @@ function normalizeQuery(query: string): string {
     return query.toLowerCase().trim().replace(/\s+/g, ' ');
 }
 
+function normalizeNamespace(namespace?: string): string {
+    if (!namespace) return '';
+    return namespace.toLowerCase().trim().replace(/\s+/g, '-');
+}
+
 /**
  * Generate SHA-256 hash of normalized query
  */
-function hashQuery(query: string): string {
+function hashQuery(query: string, namespace?: string): string {
     const normalized = normalizeQuery(query);
-    return CryptoJS.SHA256(normalized).toString();
+    const normalizedNamespace = normalizeNamespace(namespace);
+    const hashInput = normalizedNamespace
+        ? `${normalizedNamespace}::${normalized}`
+        : normalized;
+    return CryptoJS.SHA256(hashInput).toString();
 }
 
 /**
@@ -95,14 +108,14 @@ function toRows<T>(result: T[] | { rows: T[] }): T[] {
  * @param query - User's question
  * @returns Cached response if found (similarity >= 0.95), null otherwise
  */
-export async function lookupCache(query: string): Promise<CachedResponse | null> {
+export async function lookupCache(query: string, options: CacheOptions = {}): Promise<CachedResponse | null> {
     if (!CACHE_CONFIG.ENABLED) {
         devLog('🔍 Cache: DISABLED');
         return null;
     }
 
     const startTime = Date.now();
-    const queryHash = hashQuery(query);
+    const queryHash = hashQuery(query, options.namespace);
 
     // =========================================================================
     // L1 CACHE: REDIS (Exact Match)
@@ -264,14 +277,15 @@ export async function storeInCache(
     answer: string,
     citations: Citation[],
     confidence: number,
-    chunkIds: string[]
+    chunkIds: string[],
+    options: CacheOptions = {},
 ): Promise<string | null> {
     if (!CACHE_CONFIG.ENABLED) {
         return null;
     }
 
     try {
-        const queryHash = hashQuery(query);
+        const queryHash = hashQuery(query, options.namespace);
         const queryEmbedding = await embedText(query);
         const expiresAt = new Date(Date.now() + CACHE_CONFIG.TTL_SECONDS * 1000);
 

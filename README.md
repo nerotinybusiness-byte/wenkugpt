@@ -6,6 +6,7 @@ Production-focused RAG application for document search and chat with citations.
 - PDF/TXT ingestion pipeline (parse -> chunk -> embed -> store).
 - Hybrid retrieval (vector + full text) with reranking.
 - Chat with source citations and PDF deep-linking.
+- Runtime RAG engine switch (`v1` / `v2`) from Settings UI.
 - Semantic cache (Redis + Postgres vector fallback).
 - Admin-only document management APIs.
 
@@ -28,6 +29,12 @@ Required keys:
 - `COHERE_API_KEY` (optional; fallback ranking works without it)
 - `ADMIN_EMAILS` (comma-separated allowlist for admin-only document endpoints)
 
+Optional RAG v2 flags:
+- `RAG_V2_GRAPH_ENABLED` (`true` to enable graph memory flow)
+- `RAG_V2_REWRITE_ENABLED` (`true` to enable fallback term rewrite/classifier)
+- `RAG_V2_STRICT_GROUNDING` (`true` to require strict definition grounding)
+- `RAG_V2_KILL_SWITCH` (`true` to force server fallback to `v1`)
+
 ## Local Auth Header (current stage)
 Until full OAuth session wiring is finished, API auth expects:
 - `x-user-email: user@example.com`
@@ -35,6 +42,7 @@ Until full OAuth session wiring is finished, API auth expects:
 Local development fallback is supported via:
 - `DEV_DEFAULT_USER_EMAIL`
 - first email from `ADMIN_EMAILS` (non-production only)
+- `ALLOW_HEADERLESS_AUTH` is not used by current auth flow and should remain unset.
 
 Only emails in `ADMIN_EMAILS` can access:
 - `POST /api/ingest`
@@ -58,3 +66,4 @@ Helper/debug scripts are stored under `scripts/` and linted separately from the 
 
 ## API Contract
 - See `docs/api.md` for unified response envelope and auth rules.
+

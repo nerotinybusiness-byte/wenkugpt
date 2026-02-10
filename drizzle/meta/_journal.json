@@ -15,6 +15,13 @@
       "when": 1770461893389,
       "tag": "0001_strange_bloodstorm",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770740000000,
+      "tag": "0002_rag_v2_graph_memory",
+      "breakpoints": true
     }
   ]
 }

@@ -56,6 +56,14 @@ export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed'
 export type UserRole = 'user' | 'admin';
 export type VerificationLevel = 'basic' | 'auditor_loop';
 export type ModelType = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.0-flash' | 'gemini-1.5-flash' | 'gemini-1.5-pro' | 'claude-haiku';
+export type ConceptStatus = 'draft' | 'approved' | 'deprecated';
+export type ConceptCriticality = 'normal' | 'critical';
+export type AliasStatus = 'active' | 'deprecated';
+export type DefinitionStatus = 'draft' | 'approved' | 'rejected';
+export type RelationshipStatus = 'draft' | 'approved' | 'deprecated';
+export type RelationshipType = 'implies' | 'requires' | 'opposes' | 'contradicts' | 'similar_to';
+export type CandidateStatus = 'pending' | 'approved' | 'rejected';
+export type ReviewDecision = 'approved' | 'rejected' | 'needs_changes';
 
 // =============================================================================
 // TABLE: USERS
@@ -243,6 +251,223 @@ export const semanticCache = pgTable('semantic_cache', {
 ]);
 
 // =============================================================================
+// TABLE: CONCEPTS
+// Canonical internal concepts for slang-aware graph memory
+// =============================================================================
+
+export const concepts = pgTable('concepts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  key: varchar('key', { length: 128 }).notNull(),
+  label: varchar('label', { length: 256 }).notNull(),
+  description: text('description'),
+  status: varchar('status', { length: 32 }).$type<ConceptStatus>().default('draft').notNull(),
+  criticality: varchar('criticality', { length: 32 }).$type<ConceptCriticality>().default('normal').notNull(),
+  definedBy: uuid('defined_by').references(() => users.id, { onDelete: 'set null' }),
+  approvedBy: uuid('approved_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('concepts_key_unique_idx').on(table.key),
+  index('concepts_status_idx').on(table.status),
+]);
+
+// =============================================================================
+// TABLE: CONCEPT_ALIASES
+// Alias terms with scope/time validity
+// =============================================================================
+
+export const conceptAliases = pgTable('concept_aliases', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conceptId: uuid('concept_id').references(() => concepts.id, { onDelete: 'cascade' }).notNull(),
+  alias: varchar('alias', { length: 256 }).notNull(),
+  aliasNormalized: varchar('alias_normalized', { length: 256 }).notNull(),
+  language: varchar('language', { length: 16 }).default('cs').notNull(),
+  team: varchar('team', { length: 128 }),
+  product: varchar('product', { length: 128 }),
+  region: varchar('region', { length: 128 }),
+  process: varchar('process', { length: 128 }),
+  role: varchar('role', { length: 128 }),
+  status: varchar('status', { length: 32 }).$type<AliasStatus>().default('active').notNull(),
+  confidence: real('confidence').default(1).notNull(),
+  validFrom: timestamp('valid_from', { withTimezone: true }).defaultNow().notNull(),
+  validTo: timestamp('valid_to', { withTimezone: true }),
+  definedBy: uuid('defined_by').references(() => users.id, { onDelete: 'set null' }),
+  approvedBy: uuid('approved_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('concept_aliases_unique_scope_idx').on(
+    table.aliasNormalized,
+    table.team,
+    table.product,
+    table.region,
+    table.process,
+    table.role,
+    table.validFrom,
+  ),
+  index('concept_aliases_lookup_idx').on(table.aliasNormalized, table.status),
+  index('concept_aliases_concept_idx').on(table.conceptId),
+  index('concept_aliases_validity_idx').on(table.validFrom, table.validTo),
+]);
+
+// =============================================================================
+// TABLE: CONCEPT_DEFINITION_VERSIONS
+// Versioned definitions with temporal/scope controls
+// =============================================================================
+
+export const conceptDefinitionVersions = pgTable('concept_definition_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conceptId: uuid('concept_id').references(() => concepts.id, { onDelete: 'cascade' }).notNull(),
+  version: integer('version').notNull(),
+  definition: text('definition').notNull(),
+  status: varchar('status', { length: 32 }).$type<DefinitionStatus>().default('draft').notNull(),
+  confidence: real('confidence').default(0.7).notNull(),
+  team: varchar('team', { length: 128 }),
+  product: varchar('product', { length: 128 }),
+  region: varchar('region', { length: 128 }),
+  process: varchar('process', { length: 128 }),
+  role: varchar('role', { length: 128 }),
+  validFrom: timestamp('valid_from', { withTimezone: true }).defaultNow().notNull(),
+  validTo: timestamp('valid_to', { withTimezone: true }),
+  definedBy: uuid('defined_by').references(() => users.id, { onDelete: 'set null' }),
+  approvedBy: uuid('approved_by').references(() => users.id, { onDelete: 'set null' }),
+  sourceOfTruthDocId: uuid('source_of_truth_doc_id').references(() => documents.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('concept_definition_version_unique_idx').on(table.conceptId, table.version),
+  index('concept_definition_status_idx').on(table.status),
+  index('concept_definition_validity_idx').on(table.validFrom, table.validTo),
+  index('concept_definition_scope_idx').on(table.team, table.product),
+]);
+
+// =============================================================================
+// TABLE: CONCEPT_RELATIONSHIPS
+// Directed graph links between concepts
+// =============================================================================
+
+export const conceptRelationships = pgTable('concept_relationships', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  fromConceptId: uuid('from_concept_id').references(() => concepts.id, { onDelete: 'cascade' }).notNull(),
+  toConceptId: uuid('to_concept_id').references(() => concepts.id, { onDelete: 'cascade' }).notNull(),
+  relationType: varchar('relation_type', { length: 32 }).$type<RelationshipType>().notNull(),
+  weight: real('weight').default(1).notNull(),
+  status: varchar('status', { length: 32 }).$type<RelationshipStatus>().default('draft').notNull(),
+  confidence: real('confidence').default(0.7).notNull(),
+  team: varchar('team', { length: 128 }),
+  product: varchar('product', { length: 128 }),
+  region: varchar('region', { length: 128 }),
+  process: varchar('process', { length: 128 }),
+  role: varchar('role', { length: 128 }),
+  validFrom: timestamp('valid_from', { withTimezone: true }).defaultNow().notNull(),
+  validTo: timestamp('valid_to', { withTimezone: true }),
+  definedBy: uuid('defined_by').references(() => users.id, { onDelete: 'set null' }),
+  approvedBy: uuid('approved_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('concept_relationship_unique_idx').on(
+    table.fromConceptId,
+    table.toConceptId,
+    table.relationType,
+    table.team,
+    table.product,
+    table.region,
+    table.process,
+    table.role,
+    table.validFrom,
+  ),
+  index('concept_relationship_from_idx').on(table.fromConceptId),
+  index('concept_relationship_to_idx').on(table.toConceptId),
+  index('concept_relationship_validity_idx').on(table.validFrom, table.validTo),
+  index('concept_relationship_status_idx').on(table.status),
+]);
+
+// =============================================================================
+// TABLE: CONCEPT_EVIDENCE
+// Evidence records linked to concepts/definitions/aliases
+// =============================================================================
+
+export const conceptEvidence = pgTable('concept_evidence', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conceptId: uuid('concept_id').references(() => concepts.id, { onDelete: 'cascade' }).notNull(),
+  definitionVersionId: uuid('definition_version_id').references(() => conceptDefinitionVersions.id, { onDelete: 'set null' }),
+  aliasId: uuid('alias_id').references(() => conceptAliases.id, { onDelete: 'set null' }),
+  documentId: uuid('document_id').references(() => documents.id, { onDelete: 'set null' }),
+  sourceType: varchar('source_type', { length: 64 }).default('document').notNull(),
+  sourceUrl: varchar('source_url', { length: 2048 }),
+  excerpt: text('excerpt').notNull(),
+  author: varchar('author', { length: 256 }),
+  team: varchar('team', { length: 128 }),
+  product: varchar('product', { length: 128 }),
+  region: varchar('region', { length: 128 }),
+  process: varchar('process', { length: 128 }),
+  role: varchar('role', { length: 128 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('concept_evidence_concept_idx').on(table.conceptId),
+  index('concept_evidence_definition_idx').on(table.definitionVersionId),
+  index('concept_evidence_doc_idx').on(table.documentId),
+  index('concept_evidence_scope_idx').on(table.team, table.product),
+]);
+
+// =============================================================================
+// TABLE: TERM_CANDIDATES
+// Candidate slang terms extracted from ingestion
+// =============================================================================
+
+export const termCandidates = pgTable('term_candidates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  termOriginal: varchar('term_original', { length: 256 }).notNull(),
+  termNormalized: varchar('term_normalized', { length: 256 }).notNull(),
+  contexts: jsonb('contexts').$type<string[]>().default([]).notNull(),
+  frequency: integer('frequency').default(1).notNull(),
+  sourceType: varchar('source_type', { length: 64 }).default('document').notNull(),
+  documentId: uuid('document_id').references(() => documents.id, { onDelete: 'set null' }),
+  author: varchar('author', { length: 256 }),
+  team: varchar('team', { length: 128 }),
+  product: varchar('product', { length: 128 }),
+  region: varchar('region', { length: 128 }),
+  process: varchar('process', { length: 128 }),
+  role: varchar('role', { length: 128 }),
+  candidateConceptKey: varchar('candidate_concept_key', { length: 128 }),
+  suggestedDefinition: text('suggested_definition'),
+  confidence: real('confidence').default(0.3).notNull(),
+  status: varchar('status', { length: 32 }).$type<CandidateStatus>().default('pending').notNull(),
+  detectedAt: timestamp('detected_at', { withTimezone: true }).defaultNow().notNull(),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('term_candidates_unique_idx').on(table.termNormalized, table.documentId),
+  index('term_candidates_status_idx').on(table.status),
+  index('term_candidates_lookup_idx').on(table.termNormalized),
+  index('term_candidates_scope_idx').on(table.team, table.product),
+]);
+
+// =============================================================================
+// TABLE: DEFINITION_REVIEWS
+// Human-in-the-loop review records for term/definition approval
+// =============================================================================
+
+export const definitionReviews = pgTable('definition_reviews', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  candidateId: uuid('candidate_id').references(() => termCandidates.id, { onDelete: 'set null' }),
+  conceptId: uuid('concept_id').references(() => concepts.id, { onDelete: 'set null' }),
+  definitionVersionId: uuid('definition_version_id').references(() => conceptDefinitionVersions.id, { onDelete: 'set null' }),
+  reviewerId: uuid('reviewer_id').references(() => users.id, { onDelete: 'set null' }),
+  decision: varchar('decision', { length: 32 }).$type<ReviewDecision>().notNull(),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('definition_reviews_candidate_idx').on(table.candidateId),
+  index('definition_reviews_concept_idx').on(table.conceptId),
+  index('definition_reviews_reviewer_idx').on(table.reviewerId),
+  index('definition_reviews_created_idx').on(table.createdAt),
+]);
+
+// =============================================================================
 // TABLE: CONFIG
 // Per-user runtime configuration for the Control Panel
 // =============================================================================
@@ -395,6 +620,27 @@ export type NewAuditLog = typeof auditLogs.$inferInsert;
 
 export type SemanticCacheEntry = typeof semanticCache.$inferSelect;
 export type NewSemanticCacheEntry = typeof semanticCache.$inferInsert;
+
+export type Concept = typeof concepts.$inferSelect;
+export type NewConcept = typeof concepts.$inferInsert;
+
+export type ConceptAlias = typeof conceptAliases.$inferSelect;
+export type NewConceptAlias = typeof conceptAliases.$inferInsert;
+
+export type ConceptDefinitionVersion = typeof conceptDefinitionVersions.$inferSelect;
+export type NewConceptDefinitionVersion = typeof conceptDefinitionVersions.$inferInsert;
+
+export type ConceptRelationship = typeof conceptRelationships.$inferSelect;
+export type NewConceptRelationship = typeof conceptRelationships.$inferInsert;
+
+export type ConceptEvidence = typeof conceptEvidence.$inferSelect;
+export type NewConceptEvidence = typeof conceptEvidence.$inferInsert;
+
+export type TermCandidate = typeof termCandidates.$inferSelect;
+export type NewTermCandidate = typeof termCandidates.$inferInsert;
+
+export type DefinitionReview = typeof definitionReviews.$inferSelect;
+export type NewDefinitionReview = typeof definitionReviews.$inferInsert;
 
 export type Config = typeof config.$inferSelect;
 export type NewConfig = typeof config.$inferInsert;

@@ -57,6 +57,22 @@ Use this file as append-only progress log.
   - `https://wenkugpt-copy-22h90gzbc-nerotinys-projects.vercel.app`
   - alias `https://wenkugpt-copy.vercel.app` updated.
 
+- Closed UI/docs follow-up:
+  - fixed chat history class typo `truncat` -> `truncate` in `src/components/chat/ChatPanel.tsx`.
+  - removed obsolete `ALLOW_HEADERLESS_AUTH` from `.env.example`.
+  - documented unsupported status of `ALLOW_HEADERLESS_AUTH` in `README.md` and `docs/api.md`.
+  - updated risk register entry for env/docs drift as resolved.
+- EOD handoff prepared for 2026-02-10: `17_EOD_HANDOFF_2026-02-09.md` with summary, open items, and restart checklist.
+
+## 2026-02-10
+- Started RAG v2 implementation track (`Slang-aware Context Graph Memory`) on branch `feat/rag-engine-switch`.
+- Added dedicated v2 documentation and append-only live log under `docs/rag-v2/`.
+- Implemented v2 graph-memory schema + migration, query flow scaffolding, feature flags, and API wiring.
+- Extended Settings payload for scoped/temporal/ambiguity controls.
+- Validation after v2 implementation:
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run test:run` passed (32 tests).
 ## Next log entry template
 - Date:
 - Change made:
@@ -65,3 +81,4 @@ Use this file as append-only progress log.
 - Result:
 - New risk or blocker:
 - Next action:
+

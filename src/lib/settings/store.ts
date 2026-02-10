@@ -22,6 +22,53 @@ export const GEMINI_MODELS = [
 const VALID_GEMINI_MODEL_IDS = new Set<string>(GEMINI_MODELS.map((model) => model.id));
 
 /**
+ * Available RAG engine variants.
+ */
+export const RAG_ENGINES = [
+    {
+        id: 'v1',
+        name: 'RAG v1',
+        description: 'Current production pipeline.',
+    },
+    {
+        id: 'v2',
+        name: 'RAG v2',
+        description: 'Graph-memory capable pipeline (incremental rollout).',
+    },
+] as const;
+
+export type RAGEngineId = (typeof RAG_ENGINES)[number]['id'];
+const VALID_RAG_ENGINE_IDS = new Set<string>(RAG_ENGINES.map((engine) => engine.id));
+
+export const AMBIGUITY_POLICIES = [
+    {
+        id: 'ask',
+        name: 'Ask',
+        description: 'Request clarification when meaning is ambiguous.',
+    },
+    {
+        id: 'show_both',
+        name: 'Show Both',
+        description: 'Return both candidate meanings when conflict exists.',
+    },
+    {
+        id: 'strict',
+        name: 'Strict',
+        description: 'Fail closed when ambiguity is detected.',
+    },
+] as const;
+
+export type AmbiguityPolicyId = (typeof AMBIGUITY_POLICIES)[number]['id'];
+const VALID_AMBIGUITY_POLICY_IDS = new Set<string>(AMBIGUITY_POLICIES.map((policy) => policy.id));
+
+export interface ContextScopeSettings {
+    team: string;
+    product: string;
+    region: string;
+    process: string;
+}
+
+/**
  * Available Claude models for auditor.
  */
 export const CLAUDE_MODELS = [
@@ -34,6 +81,12 @@ export const CLAUDE_MODELS = [
  * Settings store state.
  */
 export interface SettingsState {
+    // Engine settings
+    ragEngine: RAGEngineId;
+    contextScope: ContextScopeSettings;
+    effectiveAt: string;
+    ambiguityPolicy: AmbiguityPolicyId;
+
     // Search settings
     vectorWeight: number;
     textWeight: number;
@@ -64,6 +117,10 @@ export interface SettingsState {
     } | null;
 
     // Actions
+    setRagEngine: (engine: RAGEngineId) => void;
+    setContextScopeField: (field: keyof ContextScopeSettings, value: string) => void;
+    setEffectiveAt: (effectiveAt: string) => void;
+    setAmbiguityPolicy: (policy: AmbiguityPolicyId) => void;
     setVectorWeight: (weight: number) => void;
     setTextWeight: (weight: number) => void;
     setMinScore: (score: number) => void;
@@ -83,6 +140,15 @@ export interface SettingsState {
  * Default settings values.
  */
 const DEFAULT_SETTINGS = {
+    ragEngine: 'v1' as RAGEngineId,
+    contextScope: {
+        team: '',
+        product: '',
+        region: '',
+        process: '',
+    },
+    effectiveAt: '',
+    ambiguityPolicy: 'show_both' as AmbiguityPolicyId,
     vectorWeight: 0.7,
     textWeight: 0.3,
     minScore: 0.3,
@@ -108,6 +174,46 @@ function sanitizeGeneratorModel(model: unknown): string {
         : DEFAULT_SETTINGS.generatorModel;
 }
 
+function sanitizeRagEngine(engine: unknown): RAGEngineId {
+    const candidate = typeof engine === 'string' ? engine : '';
+    return VALID_RAG_ENGINE_IDS.has(candidate)
+        ? (candidate as RAGEngineId)
+        : DEFAULT_SETTINGS.ragEngine;
+}
+
+function sanitizeAmbiguityPolicy(policy: unknown): AmbiguityPolicyId {
+    const candidate = typeof policy === 'string' ? policy : '';
+    return VALID_AMBIGUITY_POLICY_IDS.has(candidate)
+        ? (candidate as AmbiguityPolicyId)
+        : DEFAULT_SETTINGS.ambiguityPolicy;
+}
+
+function sanitizeScopeValue(value: unknown): string {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+function sanitizeContextScope(scope: unknown): ContextScopeSettings {
+    if (typeof scope !== 'object' || scope === null) {
+        return DEFAULT_SETTINGS.contextScope;
+    }
+
+    const record = scope as Partial<ContextScopeSettings>;
+    return {
+        team: sanitizeScopeValue(record.team),
+        product: sanitizeScopeValue(record.product),
+        region: sanitizeScopeValue(record.region),
+        process: sanitizeScopeValue(record.process),
+    };
+}
+
+function sanitizeEffectiveAt(value: unknown): string {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? '' : trimmed;
+}
+
 /**
  * Settings store with persistence.
  */
@@ -116,6 +222,15 @@ export const useSettings = create<SettingsState>()(
         (set) => ({
             ...DEFAULT_SETTINGS,
 
+            setRagEngine: (engine) => set({ ragEngine: sanitizeRagEngine(engine) }),
+            setContextScopeField: (field, value) => set((state) => ({
+                contextScope: {
+                    ...state.contextScope,
+                    [field]: sanitizeScopeValue(value),
+                },
+            })),
+            setEffectiveAt: (effectiveAt) => set({ effectiveAt: sanitizeEffectiveAt(effectiveAt) }),
+            setAmbiguityPolicy: (policy) => set({ ambiguityPolicy: sanitizeAmbiguityPolicy(policy) }),
             setVectorWeight: (weight) =>
                 set({ vectorWeight: weight, textWeight: 1 - weight }),
 
@@ -138,7 +253,7 @@ export const useSettings = create<SettingsState>()(
         }),
         {
             name: 'wenkugpt-settings',
-            version: 3,
+            version: 5,
             migrate: (persistedState: unknown, version: number) => {
                 if (version === 1) {
                     return DEFAULT_SETTINGS;
@@ -151,6 +266,10 @@ export const useSettings = create<SettingsState>()(
                 const merged = { ...DEFAULT_SETTINGS, ...persistedState };
                 return {
                     ...merged,
+                    ragEngine: sanitizeRagEngine(merged.ragEngine),
+                    contextScope: sanitizeContextScope(merged.contextScope),
+                    effectiveAt: sanitizeEffectiveAt(merged.effectiveAt),
+                    ambiguityPolicy: sanitizeAmbiguityPolicy(merged.ambiguityPolicy),
                     generatorModel: sanitizeGeneratorModel(merged.generatorModel),
                 };
             },
@@ -162,6 +281,7 @@ export const useSettings = create<SettingsState>()(
  * Get current settings for API use (non-reactive).
  */
 export function getSettings(): Omit<SettingsState,
+    'setRagEngine' | 'setContextScopeField' | 'setEffectiveAt' | 'setAmbiguityPolicy' |
     'setVectorWeight' | 'setTextWeight' | 'setMinScore' | 'setSearchLimit' |
     'setTopK' | 'setMinRelevance' | 'setGeneratorModel' | 'setAuditorModel' |
     'setTemperature' | 'setEnableAuditor' | 'setConfidenceThreshold' |

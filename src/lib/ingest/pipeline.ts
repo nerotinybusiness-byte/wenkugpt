@@ -13,6 +13,8 @@ import { db } from '@/lib/db';
 import { documents, chunks as chunksTable } from '@/lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { devLog, logError } from '@/lib/logger';
+import { getRagV2Flags } from '@/lib/rag-v2/flags';
+import { ingestSlangCandidates } from '@/lib/rag-v2/ingest';
 
 /**
  * Pipeline processing result
@@ -36,6 +38,7 @@ export interface PipelineResult {
         totalTextBlocks: number;
         totalTokens: number;
         embeddingApiCalls: number;
+        slangCandidates: number;
     };
 }
 
@@ -151,6 +154,7 @@ export async function processPipeline(
     const storeStart = performance.now();
 
     let documentId = '';
+    let slangCandidates = 0;
 
     if (options.skipStorage) {
         devLog('   ⚠️ Storage skipped (skipStorage=true)');
@@ -230,6 +234,23 @@ export async function processPipeline(
     const storeTimeMs = performance.now() - storeStart;
 
     // =========================================================================
+    // STEP 5: Slang candidate extraction for RAG v2
+    // =========================================================================
+    const ragV2Flags = getRagV2Flags();
+    if (!options.skipStorage && ragV2Flags.graphEnabled && documentId !== 'skipped') {
+        try {
+            const allChunkText = chunks.map((chunk) => chunk.text).join('\n');
+            slangCandidates = await ingestSlangCandidates(allChunkText, {
+                sourceType: 'ingest',
+                documentId,
+            });
+            devLog(`   âś“ RAG v2 term candidates ingested: ${slangCandidates}`);
+        } catch (error) {
+            logError('RAG v2 slang candidate ingestion failed', { route: 'ingest', stage: 'slang-candidates' }, error);
+        }
+    }
+
+    // =========================================================================
     // FINAL: Statistics
     // =========================================================================
     const totalTimeMs = performance.now() - startTime;
@@ -249,6 +270,7 @@ export async function processPipeline(
     devLog(`   Store time:    ${storeTimeMs.toFixed(0)}ms`);
     devLog(`   ─────────────────────────────`);
     devLog(`   Total time:    ${totalTimeMs.toFixed(0)}ms`);
+    devLog(`   Slang terms:   ${slangCandidates}`);
     devLog(`${'='.repeat(60)}\n`);
 
     return {
@@ -266,6 +288,7 @@ export async function processPipeline(
             totalTextBlocks,
             totalTokens,
             embeddingApiCalls,
+            slangCandidates,
         },
     };
 }

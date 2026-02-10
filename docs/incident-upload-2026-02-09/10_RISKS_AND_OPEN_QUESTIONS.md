@@ -9,9 +9,20 @@
 - Risk: old failed queue entries may appear as active incident after fix.
 - Mitigation: validate with fresh uploads after page reload and clean list.
 
-3. Env/docs drift
-- Risk: `.env.example` suggests behavior not implemented (`ALLOW_HEADERLESS_AUTH`).
-- Mitigation: align code and docs in same change cycle.
+3. Env/docs drift (resolved 2026-02-09)
+- Risk: `.env.example` previously suggested behavior not implemented (`ALLOW_HEADERLESS_AUTH`).
+- Mitigation: removed obsolete variable from `.env.example` and aligned docs with implemented auth flow.
+- Status: closed.
+
+4. RAG v2 semantic drift and ambiguity handling (opened 2026-02-10)
+- Risk: unresolved or conflicting internal meanings can degrade answer quality.
+- Mitigation: scope/time-aware graph definitions, ambiguity policies (`ask/show_both/strict`), strict grounding flag.
+- Status: in progress.
+
+5. RAG v2 rollout regression risk (opened 2026-02-10)
+- Risk: v2 graph flow could impact latency/quality during rollout.
+- Mitigation: staged rollout with feature flags and server kill-switch (`RAG_V2_KILL_SWITCH`).
+- Status: in progress.
 
 ## Open questions requiring decision
 1. What is canonical client-side identity source?

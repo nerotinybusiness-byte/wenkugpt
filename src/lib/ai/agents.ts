@@ -18,7 +18,10 @@ import { generateText } from 'ai';
 import { db } from '@/lib/db';
 import { documents } from '@/lib/db/schema';
 import type { Citation } from '@/lib/db/schema';
-import { devLog, logError } from '@/lib/logger';
+import { devLog, logError, logInfo } from '@/lib/logger';
+import { getRagV2Flags } from '@/lib/rag-v2/flags';
+import { runV2QueryFlow } from '@/lib/rag-v2/query-flow';
+import type { AmbiguityPayload, AmbiguityPolicy, ContextScope, InterpretationPayload } from '@/lib/rag-v2/types';
 
 /**
  * Source chunk with citation ID
@@ -74,12 +77,29 @@ export interface RAGResponse {
         chunksRetrieved: number;
         chunksUsed: number;
     };
+    interpretation?: InterpretationPayload;
+    ambiguities?: AmbiguityPayload[];
+    engineMeta?: {
+        engine: RAGEngineId;
+        mode: 'compat' | 'graph';
+    };
 }
+
+export type RAGEngineId = 'v1' | 'v2';
+const DEFAULT_RAG_ENGINE: RAGEngineId = 'v1';
 
 /**
  * Configuration for RAG pipeline
  */
 export interface RAGConfig {
+    /** Active RAG engine */
+    ragEngine: RAGEngineId;
+    /** Optional scope (team/product/region/process) for graph memory resolution */
+    contextScope?: ContextScope;
+    /** Optional timestamp for temporal meaning resolution */
+    effectiveAt?: string;
+    /** Strategy for ambiguity handling */
+    ambiguityPolicy?: AmbiguityPolicy;
     /** Search configuration */
     search: HybridSearchConfig;
     /** Number of top chunks to use after reranking */
@@ -104,6 +124,10 @@ const DEFAULT_GENERATOR_MODEL = 'gemini-2.5-flash';
  * Default RAG configuration
  */
 export const DEFAULT_RAG_CONFIG: RAGConfig = {
+    ragEngine: DEFAULT_RAG_ENGINE,
+    contextScope: undefined,
+    effectiveAt: undefined,
+    ambiguityPolicy: 'show_both',
     search: DEFAULT_SEARCH_CONFIG,
     topK: 5,
     confidenceThreshold: 0.85,
@@ -382,19 +406,20 @@ async function agentAuditor(
  * @param config - RAG configuration
  * @returns Response with sources and verification status
  */
-export async function executeRAG(
+async function executeRAGCore(
     query: string,
     config: RAGConfig = DEFAULT_RAG_CONFIG
 ): Promise<RAGResponse> {
     const startTime = performance.now();
+    const cacheNamespace = resolveCacheNamespace(config.ragEngine);
 
-    devLog(`Query: "${query}"`);
+    devLog(`[${config.ragEngine}] Query: "${query}"`);
     devLog(`${'='.repeat(60)}`);
 
     // ============================================================
     // CACHE CHECK - Try to find cached response first
     // ============================================================
-    const cached = await lookupCache(query);
+    const cached = await lookupCache(query, { namespace: cacheNamespace });
 
     if (cached) {
         const totalTimeMs = performance.now() - startTime;
@@ -443,6 +468,10 @@ export async function executeRAG(
                 chunksRetrieved: 0,
                 chunksUsed: sources.length,
             },
+            engineMeta: {
+                engine: config.ragEngine,
+                mode: 'compat',
+            },
         };
     }
 
@@ -478,6 +507,10 @@ export async function executeRAG(
                         totalTimeMs: performance.now() - startTime,
                         chunksRetrieved: 0,
                         chunksUsed: 0,
+                    },
+                    engineMeta: {
+                        engine: config.ragEngine,
+                        mode: 'compat',
                     },
                 };
             }
@@ -532,7 +565,8 @@ export async function executeRAG(
             finalResponse,
             citations,
             audit.confidence,
-            sources.map(s => s.chunkId)
+            sources.map(s => s.chunkId),
+            { namespace: cacheNamespace },
         );
     }
 
@@ -563,6 +597,150 @@ export async function executeRAG(
             totalTimeMs,
             chunksRetrieved: sources.length,
             chunksUsed: sources.length,
+        },
+        engineMeta: {
+            engine: config.ragEngine,
+            mode: 'compat',
+        },
+    };
+}
+
+function normalizeRagConfig(config: Partial<RAGConfig>): RAGConfig {
+    const ragEngine: RAGEngineId = config.ragEngine === 'v2' ? 'v2' : 'v1';
+    const ambiguityPolicy: AmbiguityPolicy = config.ambiguityPolicy === 'ask'
+        || config.ambiguityPolicy === 'strict'
+        || config.ambiguityPolicy === 'show_both'
+        ? config.ambiguityPolicy
+        : DEFAULT_RAG_CONFIG.ambiguityPolicy!;
+
+    const normalizedScope = config.contextScope
+        ? {
+            team: config.contextScope.team?.trim() || undefined,
+            product: config.contextScope.product?.trim() || undefined,
+            region: config.contextScope.region?.trim() || undefined,
+            process: config.contextScope.process?.trim() || undefined,
+            role: config.contextScope.role?.trim() || undefined,
+        }
+        : undefined;
+
+    const normalizedEffectiveAt = (() => {
+        const raw = config.effectiveAt?.trim();
+        if (!raw) return undefined;
+        const parsed = new Date(raw);
+        return Number.isNaN(parsed.getTime()) ? undefined : raw;
+    })();
+
+    return {
+        ...DEFAULT_RAG_CONFIG,
+        ...config,
+        search: {
+            ...DEFAULT_RAG_CONFIG.search,
+            ...(config.search ?? {}),
+        },
+        ragEngine,
+        contextScope: normalizedScope,
+        effectiveAt: normalizedEffectiveAt,
+        ambiguityPolicy,
+    };
+}
+
+function resolveCacheNamespace(engine: RAGEngineId): string {
+    // Keep v1 cache hash unchanged for backward compatibility.
+    if (engine === 'v1') return '';
+    return `rag-${engine}`;
+}
+
+async function executeRAGV2(
+    query: string,
+    config: RAGConfig,
+): Promise<RAGResponse> {
+    const flags = getRagV2Flags();
+    if (!flags.graphEnabled) {
+        const compatResponse = await executeRAGCore(query, config);
+        return {
+            ...compatResponse,
+            engineMeta: {
+                engine: 'v2',
+                mode: 'compat',
+            },
+        };
+    }
+
+    const flow = await runV2QueryFlow({
+        query,
+        contextScope: config.contextScope,
+        effectiveAt: config.effectiveAt,
+        ambiguityPolicy: config.ambiguityPolicy,
+        rewriteEnabled: flags.rewriteEnabled,
+        graphEnabled: flags.graphEnabled,
+        strictGrounding: flags.strictGrounding,
+    });
+
+    logInfo('RAG v2 telemetry', {
+        route: 'rag',
+        stage: 'query-flow',
+        ambiguityCount: flow.ambiguities.length,
+        unsupportedTermCount: flow.unsupportedTerms.length,
+        interpretationTimeMs: flow.stats.interpretationTimeMs,
+        graphExpansionTimeMs: flow.stats.graphExpansionTimeMs,
+    });
+
+    if (flow.strictFailureMessage) {
+        return {
+            response: flow.strictFailureMessage,
+            sources: [],
+            verified: true,
+            verification: {
+                assessment: 'Strict grounding requires manual verification.',
+                verifiedClaims: [],
+                removedClaims: [],
+                confidence: 1,
+            },
+            stats: {
+                retrievalTimeMs: 0,
+                generationTimeMs: 0,
+                verificationTimeMs: 0,
+                totalTimeMs: flow.stats.interpretationTimeMs + flow.stats.graphExpansionTimeMs,
+                chunksRetrieved: 0,
+                chunksUsed: 0,
+            },
+            interpretation: flow.interpretation,
+            ambiguities: flow.ambiguities,
+            engineMeta: {
+                engine: 'v2',
+                mode: 'graph',
+            },
+        };
+    }
+
+    const baseResponse = await executeRAGCore(flow.expandedQuery, config);
+    return {
+        ...baseResponse,
+        interpretation: flow.interpretation,
+        ambiguities: flow.ambiguities,
+        engineMeta: {
+            engine: 'v2',
+            mode: 'graph',
+        },
+    };
+}
+
+export async function executeRAG(
+    query: string,
+    config: Partial<RAGConfig> = DEFAULT_RAG_CONFIG,
+): Promise<RAGResponse> {
+    const normalizedConfig = normalizeRagConfig(config);
+
+    if (normalizedConfig.ragEngine === 'v2') {
+        return executeRAGV2(query, normalizedConfig);
+    }
+
+    const v1Response = await executeRAGCore(query, normalizedConfig);
+    return {
+        ...v1Response,
+        engineMeta: {
+            engine: 'v1',
+            mode: 'compat',
         },
     };
 }
