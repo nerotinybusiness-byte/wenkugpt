@@ -46,6 +46,7 @@ export default function PDFViewer({
     const [containerWidth, setContainerWidth] = useState(0);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [contextHighlights, setContextHighlights] = useState<Record<number, BoundingBox[]>>({});
+    const [contextResolveFailed, setContextResolveFailed] = useState<Record<string, boolean>>({});
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -84,11 +85,16 @@ export default function PDFViewer({
         () => highlights.filter((highlight) => highlight.page === pageNumber).map((highlight) => highlight.bbox),
         [highlights, pageNumber],
     );
+    const contextResolveKey = useMemo(
+        () => `${pageNumber}:${normalizeText(highlightContext)}:${scale.toFixed(2)}`,
+        [pageNumber, highlightContext, scale],
+    );
 
     const resolvedHighlights = contextHighlights[pageNumber] ?? [];
     const hasContextHighlights = resolvedHighlights.length > 0;
     const suppressCoarseFallback = highlightContext.trim().length > 0
         && !hasContextHighlights
+        && !contextResolveFailed[contextResolveKey]
         && isCoarseHighlightSet(currentPageHighlights);
     const effectivePageHighlights = hasContextHighlights
         ? resolvedHighlights
@@ -118,6 +124,7 @@ export default function PDFViewer({
 
     useEffect(() => {
         if (!isOpen || !highlightContext.trim() || !isCoarseHighlightSet(currentPageHighlights)) return;
+        if (contextResolveFailed[contextResolveKey]) return;
 
         let cancelled = false;
         let timer: ReturnType<typeof setTimeout> | null = null;
@@ -126,7 +133,13 @@ export default function PDFViewer({
 
         const scheduleRetry = (next: () => void) => {
             if (cancelled) return;
-            if (attempts >= maxAttempts) return;
+            if (attempts >= maxAttempts) {
+                setContextResolveFailed((prev) => ({
+                    ...prev,
+                    [contextResolveKey]: true,
+                }));
+                return;
+            }
             attempts += 1;
             timer = setTimeout(next, 180);
         };
@@ -208,6 +221,12 @@ export default function PDFViewer({
                 ...prev,
                 [pageNumber]: merged,
             }));
+            setContextResolveFailed((prev) => {
+                if (!prev[contextResolveKey]) return prev;
+                const next = { ...prev };
+                delete next[contextResolveKey];
+                return next;
+            });
         };
 
         resolveContextHighlights();
@@ -216,7 +235,15 @@ export default function PDFViewer({
             cancelled = true;
             if (timer) clearTimeout(timer);
         };
-    }, [isOpen, highlightContext, pageNumber, scale, currentPageHighlights]);
+    }, [
+        isOpen,
+        highlightContext,
+        pageNumber,
+        scale,
+        currentPageHighlights,
+        contextResolveFailed,
+        contextResolveKey,
+    ]);
 
     const goToPage = (targetPage: number) => {
         if (numPages === 0) return;
