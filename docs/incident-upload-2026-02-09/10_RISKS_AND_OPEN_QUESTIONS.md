@@ -39,6 +39,16 @@
 - Mitigation: immediate DB hotfix + ingest schema preflight (`schema-health`) + strict schema check script in deployment runbook.
 - Status: mitigated (service restored, guardrails deployed; continue monitoring).
 
+9. Template detection quality drift (opened 2026-02-10)
+- Risk: false-positive/false-negative template matches can over-filter useful chunks or under-filter boilerplate, impacting answer quality.
+- Mitigation: profile-based matching thresholds, warning-only mode, telemetry (`template_match_rate`, `template_boilerplate_chunks_filtered`, `retrieval_boilerplate_hit_rate`), iterative profile tuning with reference PDFs.
+- Status: in progress.
+
+10. OCR fallback latency/cost in ingest (opened 2026-02-10)
+- Risk: OCR fallback for low-text PDF pages can add ingest latency and model cost spikes.
+- Mitigation: gated by feature flag (`TEMPLATE_OCR_FALLBACK_ENABLED`), sampled-pages strategy (10% pages, min 3, max 12), timeout warning (`ocr_timeout`) and phased rollout.
+- Status: in progress.
+
 ## Open questions requiring decision
 1. What is canonical client-side identity source?
 - Option A: `NEXT_PUBLIC_DEFAULT_USER_EMAIL` (simple, static)
@@ -60,9 +70,17 @@
 6. Should `db:check-ingest-schema` become a required predeploy gate for production?
 - Proposed default: yes for production path; optional in local dev.
 
+7. What should be the default active template profile in production?
+- Proposed default: start with `wenku-manual-v1` only in preview, then promote after match-quality review.
+
+8. Should boilerplate exclusion be enabled globally or scoped to selected projects/docs first?
+- Proposed default: staged enablement via `TEMPLATE_AWARE_FILTERING_ENABLED` (preview -> 10% -> 100%).
+
 ## Exit criteria for incident closure
 - Header propagation fixed and verified in browser.
 - PDF uploads verified on fresh attempts.
 - Chat/history/documents flows verified end-to-end.
 - Docs and env behavior aligned.
 - Live log updated with closure note.
+- Template-aware ingest migration applied and schema preflight green on target environment.
+- Template flags rolled out with stable telemetry (no regression in retrieval quality/latency).

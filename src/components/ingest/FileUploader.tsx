@@ -16,6 +16,15 @@ interface FileWithStatus {
     message?: string;
 }
 
+interface TemplateUploadDiagnostics {
+    profileId: string | null;
+    matched: boolean;
+    matchScore: number | null;
+    detectionMode: 'text' | 'ocr' | 'hybrid' | 'none';
+    boilerplateChunks: number;
+    warnings: string[];
+}
+
 interface ApiSuccess<T> {
     success: true;
     data: T;
@@ -138,11 +147,11 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                 body: formData,
             });
             const raw = await response.text();
-            let payload: ApiResponse<{ documentId: string }> | null = null;
+            let payload: ApiResponse<{ documentId: string; template?: TemplateUploadDiagnostics }> | null = null;
 
             if (raw) {
                 try {
-                    payload = JSON.parse(raw) as ApiResponse<{ documentId: string }>;
+                    payload = JSON.parse(raw) as ApiResponse<{ documentId: string; template?: TemplateUploadDiagnostics }>;
                 } catch {
                     payload = null;
                 }
@@ -155,7 +164,15 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                 throw new Error(payload?.error || 'Upload failed');
             }
 
-            setFiles((prev) => prev.map((f) => (f.id === fileWrapper.id ? { ...f, status: 'success' } : f)));
+            const templateDiagnostics = payload.data.template;
+            const templateWarnings = templateDiagnostics?.warnings || [];
+            const successMessage = templateWarnings.length > 0
+                ? `Complete (template warnings: ${templateWarnings.join(', ')})`
+                : templateDiagnostics?.matched
+                    ? `Complete (template: ${templateDiagnostics.profileId || 'matched'}, filtered ${templateDiagnostics.boilerplateChunks})`
+                    : 'Complete';
+
+            setFiles((prev) => prev.map((f) => (f.id === fileWrapper.id ? { ...f, status: 'success', message: successMessage } : f)));
             if (onUploadComplete) onUploadComplete();
         } catch (error) {
             const rawMessage = error instanceof Error ? error.message : 'Upload failed';
@@ -240,7 +257,7 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                                     {wrap.status === 'pending' && <span className="text-white/40">Ready to upload</span>}
                                     {wrap.status === 'uploading' && <span className="text-blue-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Uploading...</span>}
                                     {wrap.status === 'processing' && <span className="text-indigo-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Processing...</span>}
-                                    {wrap.status === 'success' && <span className="text-emerald-400 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Complete</span>}
+                                    {wrap.status === 'success' && <span className="text-emerald-400 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> {wrap.message || 'Complete'}</span>}
                                     {wrap.status === 'error' && <span className="text-red-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {wrap.message || 'Error'}</span>}
                                 </div>
                             </div>

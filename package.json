@@ -14,6 +14,7 @@
     "db:studio": "drizzle-kit studio",
     "db:introspect": "drizzle-kit introspect",
     "db:check-ingest-schema": "npx tsx scripts/check_ingest_schema.ts --strict",
+    "template:build-profile": "npx tsx scripts/build_template_profile.ts",
     "test": "vitest",
     "test:run": "vitest run"
   },

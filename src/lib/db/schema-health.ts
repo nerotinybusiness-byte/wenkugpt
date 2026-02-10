@@ -1,12 +1,23 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 
-const REQUIRED_CHUNKS_COLUMNS = [
-    'highlight_boxes',
-    'highlight_text',
-    'embedding',
-    'fts_vector',
-] as const;
+const REQUIRED_TABLE_COLUMNS = {
+    chunks: [
+        'highlight_boxes',
+        'highlight_text',
+        'embedding',
+        'fts_vector',
+        'is_template_boilerplate',
+    ],
+    documents: [
+        'template_profile_id',
+        'template_matched',
+        'template_match_score',
+        'template_boilerplate_chunks',
+        'template_detection_mode',
+        'template_warnings',
+    ],
+} as const;
 
 const REQUIRED_EXTENSIONS = ['vector'] as const;
 const CACHE_TTL_MS = 60_000;
@@ -23,6 +34,7 @@ interface RowResult<T> {
 }
 
 interface ColumnRow {
+    table_name: string;
     column_name: string;
 }
 
@@ -48,7 +60,7 @@ function buildErrorMessage(report: IngestSchemaHealthResult): string {
     const problems: string[] = [];
 
     if (report.missingColumns.length > 0) {
-        problems.push(`missing columns in public.chunks: ${report.missingColumns.join(', ')}`);
+        problems.push(`missing columns: ${report.missingColumns.join(', ')}`);
     }
     if (report.missingExtensions.length > 0) {
         problems.push(`missing postgres extensions: ${report.missingExtensions.join(', ')}`);
@@ -82,10 +94,10 @@ export async function checkIngestSchemaHealth(): Promise<IngestSchemaHealthResul
     }
 
     const columnResult = await db.execute(sql`
-        select column_name
+        select table_name, column_name
         from information_schema.columns
         where table_schema = 'public'
-          and table_name = 'chunks'
+          and table_name in ('chunks', 'documents')
     `);
     const extensionResult = await db.execute(sql`
         select extname
@@ -94,7 +106,12 @@ export async function checkIngestSchemaHealth(): Promise<IngestSchemaHealthResul
 
     const existingColumns = new Set(
         normalizeRows<ColumnRow>(columnResult)
-            .map((row) => row.column_name?.toLowerCase())
+            .map((row) => {
+                const table = row.table_name?.toLowerCase();
+                const column = row.column_name?.toLowerCase();
+                if (!table || !column) return null;
+                return `${table}.${column}`;
+            })
             .filter((value): value is string => Boolean(value))
     );
     const existingExtensions = new Set(
@@ -103,12 +120,16 @@ export async function checkIngestSchemaHealth(): Promise<IngestSchemaHealthResul
             .filter((value): value is string => Boolean(value))
     );
 
-    const missingColumns = REQUIRED_CHUNKS_COLUMNS.filter((column) => !existingColumns.has(column));
+    const missingColumns = Object.entries(REQUIRED_TABLE_COLUMNS).flatMap(([table, columns]) => (
+        columns
+            .filter((column) => !existingColumns.has(`${table}.${column}`))
+            .map((column) => `${table}.${column}`)
+    ));
     const missingExtensions = REQUIRED_EXTENSIONS.filter((ext) => !existingExtensions.has(ext));
 
     const details: string[] = [];
     if (missingColumns.length > 0) {
-        details.push(`chunks missing required columns: ${missingColumns.join(', ')}`);
+        details.push(`missing required columns: ${missingColumns.join(', ')}`);
     }
     if (missingExtensions.length > 0) {
         details.push(`missing required extensions: ${missingExtensions.join(', ')}`);

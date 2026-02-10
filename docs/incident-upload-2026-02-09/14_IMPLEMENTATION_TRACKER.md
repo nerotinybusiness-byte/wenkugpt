@@ -78,3 +78,18 @@ Fix missing `x-user-email` propagation in browser API requests.
 8. `done` Add explicit PG `42703` error mapping + `INGEST_SCHEMA_MISMATCH` response path.
 9. `done` Add strict guardrail script (`scripts/check_ingest_schema.ts`) + npm script.
 10. `done` Production deploy + post-deploy ingest validation for hardening patch.
+
+## Template-aware ingest track (2026-02-10)
+1. `done` Add template profile module with registry loading and diagnostics (`src/lib/ingest/template.ts`).
+2. `done` Add default template profile seed (`config/template-profiles/wenku-manual-v1.json`).
+3. `done` Add template profile builder script (`scripts/build_template_profile.ts`) + npm script (`template:build-profile`).
+4. `done` Integrate template detection into ingest pipeline with 10% sampling (`min 3`, `max 12`) and optional OCR fallback.
+5. `done` Add boilerplate chunk marking (`chunks.is_template_boilerplate`) and exclusion from embedding/FTS writes.
+6. `done` Add retrieval-time exclusion guarded by feature flag (`TEMPLATE_AWARE_FILTERING_ENABLED`) in `src/lib/db/queries.ts`.
+7. `done` Extend `POST /api/ingest` response with template diagnostics and options support for `templateProfileId`.
+8. `done` Extend `GET /api/documents` payload with template diagnostics fields.
+9. `done` Update file-management UI to surface template warnings and match metadata.
+10. `done` Add migration `drizzle/0005_template_aware_ingest.sql` and update schema preflight requirements.
+11. `done` Update docs/env (`README.md`, `docs/api.md`, `.env.example`).
+12. `done` Add tests for template module and schema-health updates; run full gates (`tsc`, `lint`, `lint:scripts`, `test:run`).
+13. `in_progress` Rollout execution: apply migration on target DB, generate tuned production profile(s), enable flags progressively (preview -> partial -> full).

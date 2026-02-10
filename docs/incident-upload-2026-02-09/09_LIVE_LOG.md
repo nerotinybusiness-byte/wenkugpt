@@ -155,6 +155,38 @@ Use this file as append-only progress log.
   - alias `https://wenkugpt-copy.vercel.app` updated.
   - post-deploy ingest smoke (`POST /api/ingest` with admin header) returned `200` + `success: true`.
 - Current status: schema drift hotfix and ingest hardening are deployed and verified; monitor-only phase remains.
+
+- Started and completed local implementation track for template-aware PDF ingest (`Template-Aware PDF Ingest Proti Zmateni Chatu`):
+  - added template detection module with profile registry, 10% page sampling (`min 3`, `max 12`), visual/token fingerprints, and optional Gemini OCR fallback:
+    - `src/lib/ingest/template.ts`
+    - `config/template-profiles/wenku-manual-v1.json`
+    - `scripts/build_template_profile.ts`
+  - integrated template diagnostics and boilerplate classification into ingest pipeline:
+    - `src/lib/ingest/pipeline.ts`
+    - diagnostics persisted on `documents` (`templateProfileId`, `templateMatched`, `templateMatchScore`, `templateBoilerplateChunks`, `templateDetectionMode`, `templateWarnings`)
+    - boilerplate chunks marked via `chunks.is_template_boilerplate`
+    - boilerplate chunks excluded from embedding/FTS writes.
+  - added retrieval exclusion with rollout-safe feature flag guard:
+    - `src/lib/db/queries.ts` now filters boilerplate chunks only when `TEMPLATE_AWARE_FILTERING_ENABLED=true`.
+  - expanded ingest and documents API payloads:
+    - `POST /api/ingest` returns `data.template` diagnostics and supports `options.templateProfileId`.
+    - `GET /api/documents` returns template diagnostics fields.
+  - updated ingest/file-management UI:
+    - upload success status now surfaces template warnings/summary.
+    - document list surfaces template match metadata and warning/failure detail.
+  - added schema + migration:
+    - `drizzle/0005_template_aware_ingest.sql`
+    - updated schema preflight checks for new required columns (`chunks` + `documents`).
+  - docs/env updates:
+    - `docs/api.md`, `README.md`, `.env.example`.
+- Validation after template-aware implementation:
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run lint:scripts` passed.
+  - `npm run test:run` passed (`54/54`).
+- Current status:
+  - code + tests complete locally.
+  - pending operational rollout steps: apply DB migration `0005_template_aware_ingest.sql`, generate/tune reference profile from production PDF corpus, enable template feature flags gradually in preview/production.
 ## Next log entry template
 - Date:
 - Change made:

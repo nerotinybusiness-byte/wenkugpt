@@ -22,6 +22,7 @@ const ALLOWED_TYPES = ['application/pdf', 'text/plain'] as const;
 const IngestRequestSchema = z.object({
     accessLevel: z.enum(['public', 'private', 'team']).default('private'),
     skipEmbedding: z.boolean().default(false),
+    templateProfileId: z.string().trim().min(1).max(128).optional(),
 });
 
 function sanitizeFilename(name: string): string {
@@ -39,7 +40,11 @@ function resolveMimeType(file: File): string {
     return 'application/octet-stream';
 }
 
-function parseIngestOptions(formData: FormData): { accessLevel: 'public' | 'private' | 'team'; skipEmbedding: boolean } {
+function parseIngestOptions(formData: FormData): {
+    accessLevel: 'public' | 'private' | 'team';
+    skipEmbedding: boolean;
+    templateProfileId?: string;
+} {
     const optionsRaw = formData.get('options');
 
     if (typeof optionsRaw === 'string') {
@@ -163,6 +168,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             accessLevel: options.accessLevel,
             skipEmbedding: options.skipEmbedding,
             originalFilename: file.name,
+            templateProfileId: options.templateProfileId,
         });
 
         return apiSuccess({
@@ -170,8 +176,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             stats: {
                 pageCount: result.stats.pageCount,
                 chunkCount: result.stats.chunkCount,
+                indexableChunkCount: result.stats.indexableChunkCount,
+                boilerplateChunkCount: result.stats.boilerplateChunkCount,
                 totalTokens: result.stats.totalTokens,
                 processingTimeMs: Math.round(result.stats.totalTimeMs),
+            },
+            template: {
+                profileId: result.template.profileId,
+                matched: result.template.matched,
+                matchScore: result.template.matchScore,
+                detectionMode: result.template.detectionMode,
+                boilerplateChunks: result.template.boilerplateChunks,
+                warnings: result.template.warnings,
             },
         });
     } catch (error) {
@@ -194,7 +210,7 @@ export async function GET(): Promise<NextResponse> {
                 body: 'multipart/form-data',
                 fields: {
                     file: 'PDF or TXT file (required)',
-                    options: 'JSON string with { accessLevel?: "public"|"private"|"team", skipEmbedding?: boolean }',
+                    options: 'JSON string with { accessLevel?: "public"|"private"|"team", skipEmbedding?: boolean, templateProfileId?: string }',
                 },
             },
         },

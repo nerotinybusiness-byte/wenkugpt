@@ -6,13 +6,14 @@ dotenv.config({ path: path.join(process.cwd(), '.env.local') });
 import { parseDocument, ParsedDocument } from './parser';
 import { chunkDocument, SemanticChunk, DEFAULT_CHUNKER_CONFIG } from './chunker';
 import { embedTexts, isEmbedderConfigured, DEFAULT_EMBEDDER_CONFIG } from './embedder';
+import { detectTemplateForDocument, type TemplateDiagnostics } from './template';
 import { logResidencyStatus } from '@/lib/config/regions';
 import CryptoJS from 'crypto-js';
 import fs from 'fs/promises';
 import { db } from '@/lib/db';
 import { documents, chunks as chunksTable, type BoundingBox } from '@/lib/db/schema';
-import { eq, and, sql } from 'drizzle-orm';
-import { devLog, logError } from '@/lib/logger';
+import { and, eq, sql } from 'drizzle-orm';
+import { devLog, logError, logInfo } from '@/lib/logger';
 import { getRagV2Flags } from '@/lib/rag-v2/flags';
 import { ingestSlangCandidates } from '@/lib/rag-v2/ingest';
 
@@ -26,6 +27,8 @@ export interface PipelineResult {
     document: ParsedDocument;
     /** Semantic chunks with embeddings */
     chunks: SemanticChunk[];
+    /** Template diagnostics used for filtering and warnings */
+    template: TemplateDiagnostics;
     /** Processing statistics */
     stats: {
         parseTimeMs: number;
@@ -39,6 +42,8 @@ export interface PipelineResult {
         totalTokens: number;
         embeddingApiCalls: number;
         slangCandidates: number;
+        indexableChunkCount: number;
+        boilerplateChunkCount: number;
     };
 }
 
@@ -171,7 +176,7 @@ function buildHighlightText(chunk: SemanticChunk): string | null {
 
 /**
  * Process a document through the full ingestion pipeline
- * 
+ *
  * @param buffer - File content as Buffer or Uint8Array
  * @param mimeType - MIME type of the file
  * @param filename - Original filename
@@ -188,7 +193,8 @@ export async function processPipeline(
         skipEmbedding?: boolean;
         skipStorage?: boolean;
         originalFilename?: string;
-    } = {}
+        templateProfileId?: string;
+    } = {},
 ): Promise<PipelineResult> {
     const startTime = performance.now();
     const userId = options.userId;
@@ -199,7 +205,7 @@ export async function processPipeline(
     }
 
     devLog(`\n${'='.repeat(60)}`);
-    devLog(`📄 WENKUGPT Ingestion Pipeline`);
+    devLog('WENKUGPT Ingestion Pipeline');
     devLog(`${'='.repeat(60)}`);
     devLog(`File: ${filename}`);
     devLog(`Type: ${mimeType}`);
@@ -211,56 +217,95 @@ export async function processPipeline(
     // =========================================================================
     // STEP 1: Parse Document
     // =========================================================================
-    devLog('📖 Step 1: Parsing document...');
+    devLog('Step 1: Parsing document...');
     const parseStart = performance.now();
 
     const document = await parseDocument(buffer, mimeType);
 
     const parseTimeMs = performance.now() - parseStart;
-    devLog(`   ✓ Parsed ${document.pageCount} pages in ${parseTimeMs.toFixed(0)}ms`);
+    devLog(`   Parsed ${document.pageCount} pages in ${parseTimeMs.toFixed(0)}ms`);
 
     const totalTextBlocks = document.pages.reduce(
         (sum, page) => sum + page.textBlocks.length,
-        0
+        0,
     );
-    devLog(`   ✓ Found ${totalTextBlocks} text blocks`);
+    devLog(`   Found ${totalTextBlocks} text blocks`);
 
     // =========================================================================
     // STEP 2: Semantic Chunking
     // =========================================================================
-    devLog('\n✂️  Step 2: Semantic chunking...');
+    devLog('\nStep 2: Semantic chunking...');
     const chunkStart = performance.now();
 
     const chunks = chunkDocument(document.pages, DEFAULT_CHUNKER_CONFIG);
 
     const chunkTimeMs = performance.now() - chunkStart;
-    const totalTokens = chunks.reduce((sum, c) => sum + c.tokenCount, 0);
+    const totalTokens = chunks.reduce((sum, chunk) => sum + chunk.tokenCount, 0);
 
-    devLog(`   ✓ Created ${chunks.length} semantic chunks in ${chunkTimeMs.toFixed(0)}ms`);
-    devLog(`   ✓ Total tokens: ~${totalTokens}`);
+    devLog(`   Created ${chunks.length} semantic chunks in ${chunkTimeMs.toFixed(0)}ms`);
+    devLog(`   Total tokens: ~${totalTokens}`);
+
+    // =========================================================================
+    // STEP 2.5: Template diagnostics and boilerplate classification
+    // =========================================================================
+    devLog('\nStep 2.5: Template diagnostics...');
+    const templateResult = await detectTemplateForDocument({
+        buffer,
+        mimeType,
+        document,
+        chunks,
+        templateProfileId: options.templateProfileId,
+    });
+    const boilerplateChunkIndexes = templateResult.boilerplateChunkIndexes;
+    const indexedChunkEntries = chunks
+        .map((chunk, index) => ({ chunk, index }))
+        .filter((entry) => !boilerplateChunkIndexes.has(entry.index));
+
+    devLog(`   Template matched: ${templateResult.diagnostics.matched ? 'yes' : 'no'}`);
+    devLog(`   Boilerplate chunks filtered: ${boilerplateChunkIndexes.size}`);
+    devLog(`   Indexable chunks: ${indexedChunkEntries.length}`);
+    logInfo('Template ingest telemetry', {
+        route: 'ingest',
+        stage: 'template',
+        template_match_rate: templateResult.diagnostics.matched ? 1 : 0,
+        template_boilerplate_chunks_filtered: boilerplateChunkIndexes.size,
+        ocr_fallback_rate: templateResult.diagnostics.detectionMode === 'ocr' || templateResult.diagnostics.detectionMode === 'hybrid' ? 1 : 0,
+    });
 
     // =========================================================================
     // STEP 3: Generate Embeddings
     // =========================================================================
-    devLog('\n🧠 Step 3: Generating embeddings...');
+    devLog('\nStep 3: Generating embeddings...');
     const embedStart = performance.now();
 
     let embeddingApiCalls = 0;
-    let chunkEmbeddings: number[][] = [];
+    const embeddingByChunkIndex = new Map<number, number[]>();
 
-    if (options.skipEmbedding || !isEmbedderConfigured()) {
-        devLog('   ⚠️ Embedding skipped (API key not configured or skipEmbedding=true)');
-        // Create placeholder zero vectors
-        chunkEmbeddings = chunks.map(() => new Array(768).fill(0));
+    if (indexedChunkEntries.length === 0) {
+        devLog('   Embedding skipped (no indexable chunks after template filtering)');
+    } else if (options.skipEmbedding || !isEmbedderConfigured()) {
+        devLog('   Embedding skipped (API key not configured or skipEmbedding=true)');
+        for (const entry of indexedChunkEntries) {
+            embeddingByChunkIndex.set(entry.index, new Array(768).fill(0));
+        }
     } else {
         const embedResult = await embedTexts(
-            chunks.map(c => c.text),
-            DEFAULT_EMBEDDER_CONFIG
+            indexedChunkEntries.map((entry) => entry.chunk.text),
+            DEFAULT_EMBEDDER_CONFIG,
         );
-        chunkEmbeddings = embedResult.embeddings.map(e => e.embedding);
+        for (const embedding of embedResult.embeddings) {
+            const mapped = indexedChunkEntries[embedding.index];
+            if (!mapped) continue;
+            embeddingByChunkIndex.set(mapped.index, embedding.embedding);
+        }
+        for (const entry of indexedChunkEntries) {
+            if (!embeddingByChunkIndex.has(entry.index)) {
+                embeddingByChunkIndex.set(entry.index, new Array(768).fill(0));
+            }
+        }
         embeddingApiCalls = embedResult.apiCalls;
-        devLog(`   ✓ Generated ${embedResult.embeddings.length} embeddings in ${embedResult.processingTimeMs.toFixed(0)}ms`);
-        devLog(`   ✓ API calls: ${embeddingApiCalls}`);
+        devLog(`   Generated ${embedResult.embeddings.length} embeddings in ${embedResult.processingTimeMs.toFixed(0)}ms`);
+        devLog(`   API calls: ${embeddingApiCalls}`);
     }
 
     const embedTimeMs = performance.now() - embedStart;
@@ -268,14 +313,14 @@ export async function processPipeline(
     // =========================================================================
     // STEP 4: Store in Database
     // =========================================================================
-    devLog('\n💾 Step 4: Storing in database...');
+    devLog('\nStep 4: Storing in database...');
     const storeStart = performance.now();
 
     let documentId = '';
     let slangCandidates = 0;
 
     if (options.skipStorage) {
-        devLog('   ⚠️ Storage skipped (skipStorage=true)');
+        devLog('   Storage skipped (skipStorage=true)');
         documentId = 'skipped';
     } else {
         try {
@@ -305,46 +350,75 @@ export async function processPipeline(
                     pageCount: document.pageCount,
                     accessLevel,
                     processingStatus: 'processing',
+                    templateProfileId: templateResult.diagnostics.profileId,
+                    templateMatched: templateResult.diagnostics.matched,
+                    templateMatchScore: templateResult.diagnostics.matchScore,
+                    templateBoilerplateChunks: templateResult.diagnostics.boilerplateChunks,
+                    templateDetectionMode: templateResult.diagnostics.detectionMode === 'none'
+                        ? null
+                        : templateResult.diagnostics.detectionMode,
+                    templateWarnings: templateResult.diagnostics.warnings.length > 0
+                        ? templateResult.diagnostics.warnings
+                        : null,
                 }).returning();
 
                 documentId = doc.id;
-                devLog(`   ✓ Created document: ${documentId}`);
+                devLog(`   Created document: ${documentId}`);
 
-                // Prepare chunk records
-                const chunkRecords = chunks.map((chunk, index) => ({
-                    documentId: doc.id,
-                    content: chunk.text,
-                    contentHash: sha256(chunk.text),
-                    embedding: chunkEmbeddings[index],
-                    pageNumber: chunk.page,
-                    boundingBox: chunk.bbox,
-                    highlightBoxes: buildHighlightBoxes(chunk),
-                    highlightText: buildHighlightText(chunk),
-                    parentHeader: chunk.parentHeader || null,
-                    chunkIndex: index,
-                    tokenCount: chunk.tokenCount,
-                    accessLevel,
-                    // Generate simple full-text search vector (Czech dict not available)
-                    ftsVector: sql`to_tsvector('simple', ${chunk.text})`,
-                }));
+                // Prepare chunk records.
+                const chunkRecords = chunks.map((chunk, index) => {
+                    const isTemplateBoilerplate = boilerplateChunkIndexes.has(index);
+                    return {
+                        documentId: doc.id,
+                        content: chunk.text,
+                        contentHash: sha256(chunk.text),
+                        embedding: isTemplateBoilerplate
+                            ? null
+                            : (embeddingByChunkIndex.get(index) ?? new Array(768).fill(0)),
+                        pageNumber: chunk.page,
+                        boundingBox: chunk.bbox,
+                        highlightBoxes: buildHighlightBoxes(chunk),
+                        highlightText: buildHighlightText(chunk),
+                        parentHeader: chunk.parentHeader || null,
+                        chunkIndex: index,
+                        tokenCount: chunk.tokenCount,
+                        accessLevel,
+                        isTemplateBoilerplate,
+                        // Generate simple full-text search vector (Czech dict not available).
+                        ftsVector: isTemplateBoilerplate
+                            ? null
+                            : sql`to_tsvector('simple', ${chunk.text})`,
+                    };
+                });
 
-                // Batch insert chunks (100 at a time for Supabase)
+                // Batch insert chunks (100 at a time for Supabase).
                 const BATCH_SIZE = 100;
                 for (let i = 0; i < chunkRecords.length; i += BATCH_SIZE) {
                     const batch = chunkRecords.slice(i, i + BATCH_SIZE);
                     await tx.insert(chunksTable).values(batch);
-                    devLog(`   ✓ Inserted chunk batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunkRecords.length / BATCH_SIZE)}`);
+                    devLog(`   Inserted chunk batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunkRecords.length / BATCH_SIZE)}`);
                 }
 
-                // Update document status to completed
+                // Update document status to completed.
                 await tx.update(documents)
                     .set({
                         processingStatus: 'completed',
+                        processingError: null,
+                        templateProfileId: templateResult.diagnostics.profileId,
+                        templateMatched: templateResult.diagnostics.matched,
+                        templateMatchScore: templateResult.diagnostics.matchScore,
+                        templateBoilerplateChunks: templateResult.diagnostics.boilerplateChunks,
+                        templateDetectionMode: templateResult.diagnostics.detectionMode === 'none'
+                            ? null
+                            : templateResult.diagnostics.detectionMode,
+                        templateWarnings: templateResult.diagnostics.warnings.length > 0
+                            ? templateResult.diagnostics.warnings
+                            : null,
                         updatedAt: new Date(),
                     })
                     .where(eq(documents.id, doc.id));
 
-                devLog(`   ✓ Document status: completed`);
+                devLog('   Document status: completed');
             });
         } catch (error) {
             logError('Storage error in ingestion pipeline', { filename, mimeType }, error);
@@ -358,14 +432,14 @@ export async function processPipeline(
     // STEP 5: Slang candidate extraction for RAG v2
     // =========================================================================
     const ragV2Flags = getRagV2Flags();
-    if (!options.skipStorage && ragV2Flags.graphEnabled && documentId !== 'skipped') {
+    if (!options.skipStorage && ragV2Flags.graphEnabled && documentId !== 'skipped' && indexedChunkEntries.length > 0) {
         try {
-            const allChunkText = chunks.map((chunk) => chunk.text).join('\n');
+            const allChunkText = indexedChunkEntries.map((entry) => entry.chunk.text).join('\n');
             slangCandidates = await ingestSlangCandidates(allChunkText, {
                 sourceType: 'ingest',
                 documentId,
             });
-            devLog(`   âś“ RAG v2 term candidates ingested: ${slangCandidates}`);
+            devLog(`   RAG v2 term candidates ingested: ${slangCandidates}`);
         } catch (error) {
             logError('RAG v2 slang candidate ingestion failed', { route: 'ingest', stage: 'slang-candidates' }, error);
         }
@@ -377,19 +451,21 @@ export async function processPipeline(
     const totalTimeMs = performance.now() - startTime;
 
     devLog(`\n${'='.repeat(60)}`);
-    devLog(`📊 Pipeline Complete - Statistics`);
+    devLog('Pipeline Complete - Statistics');
     devLog(`${'='.repeat(60)}`);
     devLog(`   Document ID:   ${documentId}`);
     devLog(`   Pages:         ${document.pageCount}`);
     devLog(`   Text blocks:   ${totalTextBlocks}`);
     devLog(`   Chunks:        ${chunks.length}`);
+    devLog(`   Indexable:     ${indexedChunkEntries.length}`);
+    devLog(`   Boilerplate:   ${boilerplateChunkIndexes.size}`);
     devLog(`   Total tokens:  ~${totalTokens}`);
-    devLog(`   ─────────────────────────────`);
+    devLog('   -----------------------------');
     devLog(`   Parse time:    ${parseTimeMs.toFixed(0)}ms`);
     devLog(`   Chunk time:    ${chunkTimeMs.toFixed(0)}ms`);
     devLog(`   Embed time:    ${embedTimeMs.toFixed(0)}ms`);
     devLog(`   Store time:    ${storeTimeMs.toFixed(0)}ms`);
-    devLog(`   ─────────────────────────────`);
+    devLog('   -----------------------------');
     devLog(`   Total time:    ${totalTimeMs.toFixed(0)}ms`);
     devLog(`   Slang terms:   ${slangCandidates}`);
     devLog(`${'='.repeat(60)}\n`);
@@ -398,6 +474,7 @@ export async function processPipeline(
         documentId,
         document,
         chunks,
+        template: templateResult.diagnostics,
         stats: {
             parseTimeMs,
             chunkTimeMs,
@@ -410,6 +487,8 @@ export async function processPipeline(
             totalTokens,
             embeddingApiCalls,
             slangCandidates,
+            indexableChunkCount: indexedChunkEntries.length,
+            boilerplateChunkCount: boilerplateChunkIndexes.size,
         },
     };
 }
@@ -419,8 +498,6 @@ export async function processPipeline(
 // ============================================================================
 
 async function main() {
-    // Environment variables already loaded at the top
-
     const args = process.argv.slice(2);
 
     if (args.length === 0) {
@@ -453,14 +530,13 @@ async function main() {
             skipEmbedding,
         });
 
-        // Show chunk preview
-        devLog('📦 Sample Chunks:');
+        // Show chunk preview.
+        devLog('Sample Chunks:');
         for (const chunk of result.chunks.slice(0, 2)) {
             devLog(`\n[Chunk ${chunk.index}] Page ${chunk.page}, ~${chunk.tokenCount} tokens`);
             devLog(`   Header: ${chunk.parentHeader || '(none)'}`);
             devLog(`   Preview: "${chunk.text.slice(0, 100).replace(/\n/g, ' ')}..."`);
         }
-
     } catch (error) {
         logError('Pipeline CLI error', { route: 'ingest', stage: 'cli' }, error);
         process.exit(1);
@@ -468,7 +544,7 @@ async function main() {
 }
 
 if (require.main === module) {
-    main();
+    void main();
 }
 
 // Re-export types

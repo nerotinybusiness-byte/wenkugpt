@@ -35,6 +35,10 @@ Optional RAG v2 flags:
 - `RAG_V2_STRICT_GROUNDING` (`true` to require strict definition grounding)
 - `RAG_V2_KILL_SWITCH` (`true` to force server fallback to `v1`)
 
+Optional template-ingest flags:
+- `TEMPLATE_AWARE_FILTERING_ENABLED` (`true` to enable template matching + boilerplate exclusion)
+- `TEMPLATE_OCR_FALLBACK_ENABLED` (`true` to allow Gemini OCR fallback for low-text PDF pages)
+
 ## Local Auth Header (current stage)
 Until full OAuth session wiring is finished, API auth expects:
 - `x-user-email: user@example.com`
@@ -58,6 +62,7 @@ Only emails in `ADMIN_EMAILS` can access:
 - `npm run lint:scripts`
 - `npm run test:run`
 - `npx tsc --noEmit`
+- `npm run template:build-profile -- ./path/to/reference.pdf --profile-id my-template`
 
 Helper/debug scripts are stored under `scripts/` and linted separately from the production app.
 

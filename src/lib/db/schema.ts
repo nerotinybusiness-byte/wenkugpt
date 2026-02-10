@@ -112,6 +112,12 @@ export const documents = pgTable('documents', {
     .default('pending')
     .notNull(),
   processingError: text('processing_error'),
+  templateProfileId: varchar('template_profile_id', { length: 128 }),
+  templateMatched: boolean('template_matched').default(false).notNull(),
+  templateMatchScore: real('template_match_score'),
+  templateBoilerplateChunks: integer('template_boilerplate_chunks').default(0).notNull(),
+  templateDetectionMode: varchar('template_detection_mode', { length: 32 }),
+  templateWarnings: jsonb('template_warnings').$type<string[]>(),
 
   // Timestamps
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -159,6 +165,7 @@ export const chunks = pgTable('chunks', {
 
   // Token stats
   tokenCount: integer('token_count'),
+  isTemplateBoilerplate: boolean('is_template_boilerplate').default(false).notNull(),
 
   // Access control (inherited from document)
   accessLevel: varchar('access_level', { length: 32 }).$type<AccessLevel>().default('private').notNull(),

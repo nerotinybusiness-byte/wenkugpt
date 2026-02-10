@@ -1,0 +1,44 @@
+{
+  "id": "wenku-manual-v1",
+  "version": 1,
+  "name": "Wenku Manual Template v1",
+  "description": "Reference profile for common Wenku manual contact/footer boilerplate sections.",
+  "matchThreshold": 0.65,
+  "anchors": [
+    {
+      "text": "agentura wenku",
+      "weight": 1.2
+    },
+    {
+      "text": "kontakt",
+      "weight": 1.0
+    },
+    {
+      "text": "www.wenku.cz",
+      "weight": 1.1
+    },
+    {
+      "text": "uplne@wenku.cz",
+      "weight": 1.1
+    },
+    {
+      "text": "+420",
+      "weight": 0.8
+    }
+  ],
+  "boilerplatePatterns": [
+    "agentura wenku",
+    "kontakt",
+    "www.wenku.cz",
+    "uplne@wenku.cz",
+    "+420",
+    "na hanspaulce",
+    "dejvice",
+    "ic 28431375"
+  ],
+  "sampledPages": [],
+  "metadata": {
+    "source": "manual-seed",
+    "notes": "Initial baseline profile; refresh with scripts/build_template_profile.ts for production tuning."
+  }
+}

@@ -1,17 +1,36 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { FileText, Trash2, CheckCircle, Loader2, AlertCircle, Eye, X, CheckSquare, Square, RefreshCw, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+    AlertCircle,
+    CheckCircle,
+    CheckSquare,
+    Eye,
+    FileText,
+    Loader2,
+    RefreshCw,
+    Search,
+    Square,
+    Trash2,
+    X,
+} from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/lib/api/client-request';
-import { createPortal } from 'react-dom';
 
-interface Document {
+interface DocumentItem {
     id: string;
     filename: string;
     fileSize: number;
     pageCount: number;
     processingStatus: 'completed' | 'processing' | 'failed';
+    processingError?: string | null;
+    templateProfileId?: string | null;
+    templateMatched?: boolean;
+    templateMatchScore?: number | null;
+    templateBoilerplateChunks?: number;
+    templateDetectionMode?: string | null;
+    templateWarnings?: string[] | null;
     createdAt: string;
 }
 
@@ -42,22 +61,33 @@ function toDisplayFilename(filename: string): string {
     return match?.[1] ?? filename;
 }
 
+function formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+function formatDate(dateString: string): string {
+    return new Date(dateString).toLocaleDateString();
+}
+
 export default function FileList({ refreshTrigger = 0 }: FileListProps) {
-    const [documents, setDocuments] = useState<Document[]>([]);
+    const [documents, setDocuments] = useState<DocumentItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Preview state
     const [previewDoc, setPreviewDoc] = useState<{ id: string; filename: string } | null>(null);
-    const [previewContent, setPreviewContent] = useState<string>('');
+    const [previewContent, setPreviewContent] = useState('');
     const [loadingPreview, setLoadingPreview] = useState(false);
 
     const fetchDocuments = async () => {
         try {
             const response = await apiFetch('/api/documents', { cache: 'no-store' });
-            const payload = await response.json() as ApiResponse<{ documents: Document[] }>;
+            const payload = await response.json() as ApiResponse<{ documents: DocumentItem[] }>;
             if (payload.success) {
                 setDocuments(payload.data.documents);
             }
@@ -69,29 +99,29 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
     };
 
     useEffect(() => {
-        fetchDocuments();
+        void fetchDocuments();
     }, [refreshTrigger]);
 
-    // Smart Polling Logic
     useEffect(() => {
         let intervalTime: number | null = null;
 
-        const hasProcessingDocs = documents.some(doc => doc.processingStatus === 'processing');
+        const hasProcessingDocs = documents.some((doc) => doc.processingStatus === 'processing');
         const isEmpty = documents.length === 0;
 
         if (hasProcessingDocs) {
-            // Processing: Poll fast (3s) to show progress
             intervalTime = 3000;
         } else if (isEmpty) {
-            // Empty: Poll medium (5s) to recover from potential server startup issues
             intervalTime = 5000;
         }
-        // If has documents and none are processing -> Don't poll (stable state)
 
         if (intervalTime) {
-            const timer = setInterval(fetchDocuments, intervalTime);
+            const timer = setInterval(() => {
+                void fetchDocuments();
+            }, intervalTime);
             return () => clearInterval(timer);
         }
+
+        return undefined;
     }, [documents]);
 
     const filteredDocuments = documents.filter((doc) => {
@@ -102,29 +132,26 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
     });
 
     const toggleSelect = (id: string) => {
-        const newSelected = new Set(selectedIds);
-        if (newSelected.has(id)) {
-            newSelected.delete(id);
-        } else {
-            newSelected.add(id);
-        }
-        setSelectedIds(newSelected);
+        const next = new Set(selectedIds);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        setSelectedIds(next);
     };
 
     const toggleSelectAll = () => {
         if (selectedIds.size === filteredDocuments.length && filteredDocuments.length > 0) {
             setSelectedIds(new Set());
-        } else {
-            setSelectedIds(new Set(filteredDocuments.map(d => d.id)));
+            return;
         }
+        setSelectedIds(new Set(filteredDocuments.map((doc) => doc.id)));
     };
 
     const handleDelete = async (ids: string[]) => {
         if (!confirm(`Are you sure you want to delete ${ids.length} document(s)?`)) return;
 
-        const newDeletingIds = new Set(deletingIds);
-        ids.forEach(id => newDeletingIds.add(id));
-        setDeletingIds(newDeletingIds);
+        const nextDeleting = new Set(deletingIds);
+        ids.forEach((id) => nextDeleting.add(id));
+        setDeletingIds(nextDeleting);
 
         try {
             const deletionResults = await Promise.all(
@@ -132,17 +159,16 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                     const response = await apiFetch(`/api/documents/${id}`, { method: 'DELETE' });
                     const payload = await response.json() as ApiResponse<{ id: string }>;
                     return { id, ok: payload.success };
-                })
+                }),
             );
 
-            const failed = deletionResults.filter((r) => !r.ok).map((r) => r.id);
-            const succeeded = deletionResults.filter((r) => r.ok).map((r) => r.id);
+            const failed = deletionResults.filter((row) => !row.ok).map((row) => row.id);
+            const succeeded = deletionResults.filter((row) => row.ok).map((row) => row.id);
 
-            // Remove from local state
-            setDocuments(prev => prev.filter(doc => !succeeded.includes(doc.id)));
-            setSelectedIds(prev => {
+            setDocuments((prev) => prev.filter((doc) => !succeeded.includes(doc.id)));
+            setSelectedIds((prev) => {
                 const next = new Set(prev);
-                succeeded.forEach(id => next.delete(id));
+                succeeded.forEach((id) => next.delete(id));
                 return next;
             });
 
@@ -153,16 +179,15 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
             console.error('Error deleting documents:', error);
             alert('Error deleting some documents');
         } finally {
-            // Clear deleting status
-            setDeletingIds(prev => {
+            setDeletingIds((prev) => {
                 const next = new Set(prev);
-                ids.forEach(id => next.delete(id));
+                ids.forEach((id) => next.delete(id));
                 return next;
             });
         }
     };
 
-    const openPreview = async (doc: Document) => {
+    const openPreview = async (doc: DocumentItem) => {
         setPreviewDoc({ id: doc.id, filename: toDisplayFilename(doc.filename) });
         setLoadingPreview(true);
         setPreviewContent('');
@@ -170,7 +195,6 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
         try {
             const response = await apiFetch(`/api/documents/${doc.id}/preview`);
             const payload = await response.json() as ApiResponse<{ content: string }>;
-
             if (payload.success) {
                 setPreviewContent(payload.data.content);
             } else {
@@ -186,18 +210,6 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
     const closePreview = () => {
         setPreviewDoc(null);
         setPreviewContent('');
-    };
-
-    const formatBytes = (bytes: number) => {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
-
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString();
     };
 
     const canUsePortal = typeof document !== 'undefined';
@@ -220,7 +232,6 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
 
     return (
         <div className="space-y-4">
-            {/* Header / Actions */}
             <div className="flex items-center justify-between px-2 mb-4">
                 <div className="flex items-center gap-3">
                     <button
@@ -235,11 +246,12 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                         )}
                         Select All
                     </button>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-white/40">Library ({filteredDocuments.length})</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-white/40">
+                        Library ({filteredDocuments.length})
+                    </h3>
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {/* Search Bar */}
                     <div className="relative group">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/40 group-focus-within:text-white/80 transition-colors" />
                         <input
@@ -252,7 +264,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                     </div>
 
                     <button
-                        onClick={() => fetchDocuments()}
+                        onClick={() => {
+                            void fetchDocuments();
+                        }}
                         disabled={isLoading}
                         className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-white/40 hover:text-white disabled:opacity-50"
                         title="Refresh list"
@@ -264,7 +278,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                         <Button
                             variant="destructive"
                             size="sm"
-                            onClick={() => handleDelete(Array.from(selectedIds))}
+                            onClick={() => {
+                                void handleDelete(Array.from(selectedIds));
+                            }}
                             className="h-8 text-xs bg-red-500/10 text-red-400 hover:bg-red-500/20 border-red-500/20 ml-2"
                         >
                             <Trash2 className="w-3 h-3 mr-1.5" />
@@ -284,18 +300,29 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                 {filteredDocuments.map((doc) => {
                     const isSelected = selectedIds.has(doc.id);
                     const isDeleting = deletingIds.has(doc.id);
+                    const templateInfo = doc.templateMatched
+                        ? `Template ${doc.templateProfileId || 'unknown'} (${Math.round((doc.templateMatchScore || 0) * 100)}%), filtered ${doc.templateBoilerplateChunks || 0}`
+                        : null;
+                    const warningInfo = Array.isArray(doc.templateWarnings) && doc.templateWarnings.length > 0
+                        ? `Template warnings: ${doc.templateWarnings.join(', ')}`
+                        : null;
+                    const statusInfo = doc.processingStatus === 'failed' && doc.processingError
+                        ? doc.processingError
+                        : warningInfo;
 
                     return (
                         <div
                             key={doc.id}
                             className={`group flex items-center justify-between p-3 rounded-lg border transition-all ${isSelected
                                 ? 'bg-emerald-500/5 border-emerald-500/30'
-                                : 'bg-white/5 border-white/5 hover:border-white/10'
-                                }`}
+                                : 'bg-white/5 border-white/5 hover:border-white/10'}`}
                         >
                             <div className="flex items-center gap-3 min-w-0">
                                 <div
-                                    onClick={(e) => { e.stopPropagation(); toggleSelect(doc.id); }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleSelect(doc.id);
+                                    }}
                                     className="cursor-pointer"
                                 >
                                     {isSelected ? (
@@ -305,22 +332,42 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                                     )}
                                 </div>
 
-                                <div className={`p-2 rounded-md ${doc.processingStatus === 'completed' ? 'bg-emerald-500/10' :
-                                    doc.processingStatus === 'failed' ? 'bg-red-500/10' : 'bg-blue-500/10'
-                                    }`}>
-                                    <FileText className={`w-4 h-4 ${doc.processingStatus === 'completed' ? 'text-emerald-500' :
-                                        doc.processingStatus === 'failed' ? 'text-red-500' : 'text-blue-500'
-                                        }`} />
+                                <div className={`p-2 rounded-md ${doc.processingStatus === 'completed'
+                                    ? 'bg-emerald-500/10'
+                                    : doc.processingStatus === 'failed'
+                                        ? 'bg-red-500/10'
+                                        : 'bg-blue-500/10'}`}
+                                >
+                                    <FileText className={`w-4 h-4 ${doc.processingStatus === 'completed'
+                                        ? 'text-emerald-500'
+                                        : doc.processingStatus === 'failed'
+                                            ? 'text-red-500'
+                                            : 'text-blue-500'}`}
+                                    />
                                 </div>
+
                                 <div className="min-w-0">
-                                    <p className="text-sm font-medium truncate text-white/90">{toDisplayFilename(doc.filename)}</p>
+                                    <p className="text-sm font-medium truncate text-white/90">
+                                        {toDisplayFilename(doc.filename)}
+                                    </p>
                                     <div className="flex gap-3 text-xs text-white/40">
                                         <span>{formatBytes(doc.fileSize)}</span>
-                                        <span>•</span>
+                                        <span>|</span>
                                         <span>{doc.pageCount} pages</span>
-                                        <span>•</span>
+                                        <span>|</span>
                                         <span>{formatDate(doc.createdAt)}</span>
                                     </div>
+                                    {templateInfo && (
+                                        <p className="text-[11px] text-emerald-300/80 truncate">{templateInfo}</p>
+                                    )}
+                                    {statusInfo && (
+                                        <p className={`text-[11px] truncate ${doc.processingStatus === 'failed'
+                                            ? 'text-red-300/90'
+                                            : 'text-amber-300/90'}`}
+                                        >
+                                            {statusInfo}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
@@ -346,7 +393,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
 
                                 <div className="flex items-center gap-1">
                                     <button
-                                        onClick={() => openPreview(doc)}
+                                        onClick={() => {
+                                            void openPreview(doc);
+                                        }}
                                         className="p-2 hover:bg-white/10 rounded-md transition-all text-white/40 hover:text-white"
                                         title="Preview document"
                                     >
@@ -354,7 +403,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                                     </button>
 
                                     <button
-                                        onClick={() => handleDelete([doc.id])}
+                                        onClick={() => {
+                                            void handleDelete([doc.id]);
+                                        }}
                                         disabled={isDeleting}
                                         className="p-2 hover:bg-white/10 rounded-md transition-all text-white/40 hover:text-red-400 disabled:opacity-50"
                                         title="Delete document"
@@ -408,10 +459,8 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                         </div>
                     </div>
                 </div>,
-                document.body
+                document.body,
             )}
         </div>
     );
 }
-
-

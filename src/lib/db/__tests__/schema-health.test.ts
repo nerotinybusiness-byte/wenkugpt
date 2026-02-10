@@ -23,10 +23,17 @@ describe('ingest schema health', () => {
         mockDbExecute([
             {
                 rows: [
-                    { column_name: 'highlight_boxes' },
-                    { column_name: 'highlight_text' },
-                    { column_name: 'embedding' },
-                    { column_name: 'fts_vector' },
+                    { table_name: 'chunks', column_name: 'highlight_boxes' },
+                    { table_name: 'chunks', column_name: 'highlight_text' },
+                    { table_name: 'chunks', column_name: 'embedding' },
+                    { table_name: 'chunks', column_name: 'fts_vector' },
+                    { table_name: 'chunks', column_name: 'is_template_boilerplate' },
+                    { table_name: 'documents', column_name: 'template_profile_id' },
+                    { table_name: 'documents', column_name: 'template_matched' },
+                    { table_name: 'documents', column_name: 'template_match_score' },
+                    { table_name: 'documents', column_name: 'template_boilerplate_chunks' },
+                    { table_name: 'documents', column_name: 'template_detection_mode' },
+                    { table_name: 'documents', column_name: 'template_warnings' },
                 ],
             },
             {
@@ -46,8 +53,9 @@ describe('ingest schema health', () => {
         mockDbExecute([
             {
                 rows: [
-                    { column_name: 'highlight_boxes' },
-                    { column_name: 'embedding' },
+                    { table_name: 'chunks', column_name: 'highlight_boxes' },
+                    { table_name: 'chunks', column_name: 'embedding' },
+                    { table_name: 'documents', column_name: 'template_profile_id' },
                 ],
             },
             {
@@ -59,8 +67,9 @@ describe('ingest schema health', () => {
         const result = await checkIngestSchemaHealth();
 
         expect(result.ok).toBe(false);
-        expect(result.missingColumns).toContain('highlight_text');
-        expect(result.missingColumns).toContain('fts_vector');
+        expect(result.missingColumns).toContain('chunks.highlight_text');
+        expect(result.missingColumns).toContain('chunks.fts_vector');
+        expect(result.missingColumns).toContain('documents.template_matched');
         expect(result.missingExtensions).toContain('vector');
     });
 
@@ -68,9 +77,11 @@ describe('ingest schema health', () => {
         mockDbExecute([
             {
                 rows: [
-                    { column_name: 'highlight_boxes' },
-                    { column_name: 'embedding' },
-                    { column_name: 'fts_vector' },
+                    { table_name: 'chunks', column_name: 'highlight_boxes' },
+                    { table_name: 'chunks', column_name: 'embedding' },
+                    { table_name: 'chunks', column_name: 'fts_vector' },
+                    { table_name: 'chunks', column_name: 'is_template_boilerplate' },
+                    { table_name: 'documents', column_name: 'template_profile_id' },
                 ],
             },
             {
@@ -83,6 +94,6 @@ describe('ingest schema health', () => {
         await expect(assertIngestSchemaHealth()).rejects.toMatchObject({
             name: 'IngestSchemaHealthError',
         });
-        await expect(assertIngestSchemaHealth()).rejects.toThrow(/highlight_text/);
+        await expect(assertIngestSchemaHealth()).rejects.toThrow(/chunks.highlight_text/);
     });
 });

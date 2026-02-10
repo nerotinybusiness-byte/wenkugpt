@@ -1,15 +1,15 @@
 /**
  * WENKUGPT - Hybrid Search Queries
- * 
+ *
  * Combines vector similarity search (pgvector <=>)
  * with full-text search in Czech (tsvector/tsquery).
  */
 
+import { sql } from 'drizzle-orm';
 import { db } from './index';
 import { chunks, documents } from './schema';
-import { sql } from 'drizzle-orm';
 import { embedText } from '@/lib/ingest/embedder';
-import { devLog } from '@/lib/logger';
+import { devLog, logInfo } from '@/lib/logger';
 
 /**
  * Search result with relevance scores
@@ -92,37 +92,52 @@ interface HybridSearchRow {
   original_filename: string | null;
 }
 
+function readBooleanFlag(name: string, defaultValue = false): boolean {
+  const rawValue = process.env[name];
+  if (rawValue === undefined) return defaultValue;
+
+  const normalized = rawValue.trim().toLowerCase();
+  return normalized === '1'
+    || normalized === 'true'
+    || normalized === 'yes'
+    || normalized === 'on';
+}
+
+function getTemplateChunkFilter(): ReturnType<typeof sql> {
+  const templateFilteringEnabled = readBooleanFlag('TEMPLATE_AWARE_FILTERING_ENABLED', false);
+  return templateFilteringEnabled
+    ? sql`AND c.is_template_boilerplate = false`
+    : sql``;
+}
+
 /**
  * Perform hybrid search combining vector and full-text search
- * 
+ *
  * @param query - User's search query in Czech
  * @param config - Search configuration
  * @returns Ranked search results
  */
 export async function hybridSearch(
   query: string,
-  config: HybridSearchConfig = DEFAULT_SEARCH_CONFIG
+  config: HybridSearchConfig = DEFAULT_SEARCH_CONFIG,
 ): Promise<SearchResult[]> {
   const { limit, minScore, vectorWeight, textWeight, userId } = config;
+  const templateChunkFilter = getTemplateChunkFilter();
+  const templateFilteringEnabled = readBooleanFlag('TEMPLATE_AWARE_FILTERING_ENABLED', false);
 
-  devLog(`\n🔍 Hybrid Search: "${query.slice(0, 50)}..."`);
+  devLog(`Hybrid Search: "${query.slice(0, 50)}..."`);
 
-  // Step 1: Generate query embedding
-  devLog('   📊 Generating query embedding...');
+  // Step 1: Generate query embedding.
   const queryEmbedding = await embedText(query);
   const embeddingStr = `'[${queryEmbedding.join(',')}]'::vector(768)`;
 
-  // Step 2: Execute hybrid search query
-  devLog('   🔎 Executing hybrid search...');
-
-  // Build the raw SQL for hybrid search
-  // drizzle execute() with node-postgres returns a QueryResult object, not an array
+  // Step 2: Execute hybrid search query.
   const result = await db.execute(sql`
     WITH query_embedding AS (
       SELECT ${sql.raw(embeddingStr)} AS embedding
     ),
     vector_search AS (
-      SELECT 
+      SELECT
         c.id,
         c.document_id,
         c.content,
@@ -136,21 +151,24 @@ export async function hybridSearch(
       FROM ${chunks} c
       JOIN ${documents} d ON c.document_id = d.id
       WHERE d.processing_status = 'completed'
+      ${templateChunkFilter}
       ${userId ? sql`AND (d.access_level = 'public' OR d.user_id = ${userId})` : sql``}
       ORDER BY c.embedding <=> (SELECT embedding FROM query_embedding)
       LIMIT ${limit * 2}
     ),
     text_search AS (
-      SELECT 
+      SELECT
         c.id,
         ts_rank_cd(
           c.fts_vector,
           plainto_tsquery('simple', ${query})
         ) AS text_score
       FROM ${chunks} c
-      WHERE c.fts_vector @@ plainto_tsquery('simple', ${query})
+      WHERE 1 = 1
+      ${templateChunkFilter}
+        AND c.fts_vector @@ plainto_tsquery('simple', ${query})
     )
-    SELECT 
+    SELECT
       v.id,
       v.document_id,
       v.content,
@@ -173,13 +191,19 @@ export async function hybridSearch(
     LIMIT ${limit}
   `);
 
-  // Handle both array (postgres.js) and QueryResult (node-postgres)
+  // Handle both array (postgres.js) and QueryResult (node-postgres).
   const rows = Array.isArray(result) ? result : result.rows;
 
-  devLog(`   ✓ Found ${rows.length} results`);
+  logInfo('Retrieval telemetry', {
+    route: 'chat',
+    stage: 'retrieval',
+    template_filter_enabled: templateFilteringEnabled,
+    retrieval_boilerplate_hit_rate: 0,
+    rows: rows.length,
+  });
+  devLog(`Found ${rows.length} results`);
 
-  // Transform to SearchResult objects
-  return (rows as unknown as HybridSearchRow[]).map(row => ({
+  return (rows as unknown as HybridSearchRow[]).map((row) => ({
     id: row.id,
     documentId: row.document_id,
     content: row.content,
@@ -202,13 +226,14 @@ export async function hybridSearch(
  */
 export async function vectorSearch(
   query: string,
-  limit: number = 10
+  limit: number = 10,
 ): Promise<SearchResult[]> {
+  const templateChunkFilter = getTemplateChunkFilter();
   const queryEmbedding = await embedText(query);
   const embeddingStr = `'[${queryEmbedding.join(',')}]'::vector(768)`;
 
   const result = await db.execute(sql`
-    SELECT 
+    SELECT
       c.id,
       c.document_id,
       c.content,
@@ -224,6 +249,7 @@ export async function vectorSearch(
     FROM ${chunks} c
     JOIN ${documents} d ON c.document_id = d.id
     WHERE d.processing_status = 'completed'
+    ${templateChunkFilter}
     ORDER BY c.embedding <=> ${sql.raw(embeddingStr)}
     LIMIT ${limit}
   `);
@@ -243,7 +269,7 @@ export async function vectorSearch(
     vector_score: number;
     filename: string;
     original_filename: string | null;
-  }>).map(row => ({
+  }>).map((row) => ({
     id: row.id,
     documentId: row.document_id,
     content: row.content,
@@ -266,7 +292,7 @@ export async function vectorSearch(
  */
 export async function getChunkById(chunkId: string): Promise<SearchResult | null> {
   const result = await db.execute(sql`
-    SELECT 
+    SELECT
       c.id,
       c.document_id,
       c.content,
@@ -285,7 +311,6 @@ export async function getChunkById(chunkId: string): Promise<SearchResult | null
   `);
 
   const rows = Array.isArray(result) ? result : result.rows;
-
   if (rows.length === 0) return null;
 
   const row = rows[0] as unknown as {
@@ -301,6 +326,7 @@ export async function getChunkById(chunkId: string): Promise<SearchResult | null
     filename: string;
     original_filename: string | null;
   };
+
   return {
     id: row.id,
     documentId: row.document_id,

@@ -51,9 +51,25 @@ Error responses:
 - `GET /api/history` -> `data: { history, nextCursor }`
 - `DELETE /api/history` -> `data: { cleared: true }`
 - `GET /api/documents` -> `data: { documents, nextCursor }`
+  - document item includes template diagnostics:
+    - `templateProfileId?: string | null`
+    - `templateMatched?: boolean`
+    - `templateMatchScore?: number | null`
+    - `templateBoilerplateChunks?: number`
+    - `templateDetectionMode?: 'text' | 'ocr' | 'hybrid' | 'none' | null`
+    - `templateWarnings?: string[] | null`
 - `DELETE /api/documents/:id` -> `data: { id, message }`
 - `GET /api/documents/:id/preview` -> `data: { content }`
-- `POST /api/ingest` -> `data: { documentId, stats }`
+- `POST /api/ingest` -> `data: { documentId, stats, template }`
+  - `options` supports:
+    - `templateProfileId?: string` (override default template profile registry selection)
+  - `template` shape:
+    - `profileId: string | null`
+    - `matched: boolean`
+    - `matchScore: number | null`
+    - `detectionMode: 'text' | 'ocr' | 'hybrid' | 'none'`
+    - `boilerplateChunks: number`
+    - `warnings: string[]`
 - `GET /api/ingest` -> `data: { name, version, endpoints, limits }`
 - `GET /api/health` -> `data: { status, db, durationMs }` on success
 
@@ -63,4 +79,9 @@ Error responses:
 - `RAG_V2_REWRITE_ENABLED` - enables fallback term classification/rewrite behavior.
 - `RAG_V2_STRICT_GROUNDING` - fail closed for unresolved critical definitions/ambiguity constraints.
 - `RAG_V2_KILL_SWITCH` - force `v1` execution even when client requests `v2`.
+
+## Template Ingest Feature Flags
+
+- `TEMPLATE_AWARE_FILTERING_ENABLED` - enable template profile matching and boilerplate chunk exclusion from retrieval index.
+- `TEMPLATE_OCR_FALLBACK_ENABLED` - enable Gemini OCR fallback for sampled PDF pages with weak/no text layer.
 
