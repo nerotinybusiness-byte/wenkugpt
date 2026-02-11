@@ -65,7 +65,7 @@ export default function EmptyState({ onSuggestionSelect }: EmptyStateProps) {
                             type="button"
                             onClick={() => onSuggestionSelect?.(suggestion.prompt)}
                             className="liquid-glass suggestion-card-pop w-full rounded-[24px] p-5 text-left transition-colors duration-200 hover:text-[var(--c-action)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-action)]/60"
-                            style={{ animationDelay: `${index * 90}ms` }}
+                            style={{ animationDelay: `${index * 120}ms` }}
                         >
                             <div className="flex items-start gap-4">
                                 <SuggestionIcon className="mt-0.5 h-6 w-6 text-[var(--c-action)]" strokeWidth={1.8} />
