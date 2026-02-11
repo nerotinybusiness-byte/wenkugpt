@@ -64,11 +64,18 @@ export default function EmptyState({ onSuggestionSelect }: EmptyStateProps) {
                             key={suggestion.title}
                             type="button"
                             onClick={() => onSuggestionSelect?.(suggestion.prompt)}
-                            className="liquid-glass suggestion-card-pop w-full rounded-[24px] p-5 text-left transition-colors duration-200 hover:text-[var(--c-action)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-action)]/60"
+                            className="liquid-glass suggestion-card-pop suggestion-card-hover group relative w-full rounded-[24px] p-5 text-left transition-colors duration-200 hover:text-[var(--c-action)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-action)]/60"
                             style={{ animationDelay: `${index * 110}ms` }}
                         >
-                            <div className="flex items-start gap-4">
-                                <SuggestionIcon className="mt-0.5 h-6 w-6 text-[var(--c-action)]" strokeWidth={1.8} />
+                            <span
+                                aria-hidden
+                                className="pointer-events-none absolute inset-0 rounded-[24px] opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100"
+                                style={{ backgroundColor: 'color-mix(in srgb, var(--c-glass) 18%, transparent)' }}
+                            />
+                            <div className="relative z-10 flex items-start gap-4">
+                                <div className="suggestion-icon-bubble">
+                                    <SuggestionIcon className="h-5 w-5 text-[var(--c-action)]" strokeWidth={1.8} />
+                                </div>
                                 <div>
                                     <h3 className="mb-0.5 text-[15px] font-medium tracking-wide text-[var(--c-content)]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                                         {suggestion.title}

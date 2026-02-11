@@ -333,12 +333,65 @@
     contain: paint;
     will-change: transform, opacity;
   }
+
+  .suggestion-card-hover {
+    transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      color 220ms ease;
+  }
+
+  .suggestion-card-hover:hover {
+    transform: translateY(-2px);
+  }
+
+  .suggestion-card-hover:active {
+    transform: translateY(0) scale(0.995);
+  }
+
+  .suggestion-icon-bubble {
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+    background-color: color-mix(in srgb, var(--c-glass) 12%, transparent);
+    transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      background-color 240ms ease;
+  }
+
+  .suggestion-icon-bubble svg {
+    transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .suggestion-card-hover:hover .suggestion-icon-bubble {
+    transform: translateY(-1px) scale(1.04);
+    background-color: color-mix(in srgb, var(--c-glass) 22%, transparent);
+  }
+
+  .suggestion-card-hover:hover .suggestion-icon-bubble svg {
+    transform: scale(1.08) rotate(6deg);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .suggestion-card-pop {
     animation: none;
     opacity: 1;
+    transform: none;
+  }
+
+  .suggestion-card-hover,
+  .suggestion-icon-bubble,
+  .suggestion-icon-bubble svg {
+    transition: none;
+  }
+
+  .suggestion-card-hover:hover,
+  .suggestion-card-hover:active,
+  .suggestion-card-hover:hover .suggestion-icon-bubble,
+  .suggestion-card-hover:hover .suggestion-icon-bubble svg {
     transform: none;
   }
 }
