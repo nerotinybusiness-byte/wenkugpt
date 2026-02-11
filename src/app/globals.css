@@ -224,6 +224,32 @@
     background: color-mix(in srgb, var(--c-content) 40%, transparent);
   }
 
+  .custom-scrollbar-wide {
+    scrollbar-width: auto;
+    scrollbar-color: color-mix(in srgb, var(--c-content) 45%, transparent) color-mix(in srgb, var(--c-content) 10%, transparent);
+  }
+
+  .custom-scrollbar-wide::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  .custom-scrollbar-wide::-webkit-scrollbar-track {
+    background: color-mix(in srgb, var(--c-content) 10%, transparent);
+    border-radius: 10px;
+  }
+
+  .custom-scrollbar-wide::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--c-content) 40%, transparent);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .custom-scrollbar-wide::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--c-content) 60%, transparent);
+    background-clip: padding-box;
+  }
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }

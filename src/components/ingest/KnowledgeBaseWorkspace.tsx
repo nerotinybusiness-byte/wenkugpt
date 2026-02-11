@@ -43,7 +43,7 @@ export default function KnowledgeBaseWorkspace({
             </div>
 
             <div className={cn('flex flex-col', rightPaneClassName)}>
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar-wide">
                     <FileList refreshTrigger={refreshTrigger} />
                 </div>
             </div>
