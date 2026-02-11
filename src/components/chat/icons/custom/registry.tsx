@@ -11,7 +11,6 @@ import { IconLifestyleWine } from './IconLifestyleWine';
 import { IconSportBaseballBat } from './IconSportBaseballBat';
 import { IconSportCone } from './IconSportCone';
 import { IconSportFootball } from './IconSportFootball';
-import { IconSportRope } from './IconSportRope';
 import { IconSportTennisBall } from './IconSportTennisBall';
 import { IconSportTennisRacket } from './IconSportTennisRacket';
 import { IconSportVolleyball } from './IconSportVolleyball';
@@ -24,7 +23,6 @@ export const CUSTOM_SUGGESTION_ICON_REGISTRY: Record<CustomSuggestionIconId, Cus
     sport_tennis_racket: IconSportTennisRacket,
     sport_cone: IconSportCone,
     sport_baseball_bat: IconSportBaseballBat,
-    sport_rope: IconSportRope,
     apparel_hoodie_w: IconApparelHoodieW,
     apparel_tshirt_w: IconApparelTshirtW,
     lifestyle_wine: IconLifestyleWine,

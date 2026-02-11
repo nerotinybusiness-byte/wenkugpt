@@ -7,7 +7,6 @@ export type CustomSuggestionIconId =
     | 'sport_tennis_racket'
     | 'sport_cone'
     | 'sport_baseball_bat'
-    | 'sport_rope'
     | 'apparel_hoodie_w'
     | 'apparel_tshirt_w'
     | 'lifestyle_wine'

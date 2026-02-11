@@ -84,7 +84,7 @@ export const CHAT_SUGGESTION_POOL: SuggestionPoolItem[] = [
         prompt: 'Navrhni koordinacni cviceni s palkou se zamerenim na reakci a bezpecnost.',
     },
     {
-        icon: 'sport_rope',
+        icon: 'sport_cone',
         title: 'Lano a uzly',
         subtitle: 'Postup pro kontrolu vybaveni',
         prompt: 'Vytvor postup kontroly vybaveni a zakladnich uzlu pred aktivitou.',
