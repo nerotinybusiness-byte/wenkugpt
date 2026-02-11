@@ -306,3 +306,19 @@
     background-color: var(--c-action);
   }
 }
+
+.folder-filter-select {
+  color-scheme: dark;
+  background-color: color-mix(in srgb, var(--c-content) 8%, transparent);
+  color: color-mix(in srgb, var(--c-light) 90%, transparent);
+}
+
+.folder-filter-select option {
+  background-color: #1f2126;
+  color: #eef2f7;
+}
+
+.folder-filter-select option:checked {
+  background-color: #2f6ea6;
+  color: #ffffff;
+}

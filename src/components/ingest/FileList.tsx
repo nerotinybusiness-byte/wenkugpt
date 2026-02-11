@@ -365,7 +365,7 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                 <select
                     value={folderFilter}
                     onChange={(event) => setFolderFilter(event.target.value)}
-                    className="h-8 rounded-md bg-white/5 border border-white/10 px-2 text-xs text-white/80 focus:outline-none focus:border-white/20"
+                    className="folder-filter-select h-8 rounded-md bg-white/5 border border-white/10 px-2 text-xs text-white/90 focus:outline-none focus:border-white/20"
                 >
                     <option value="__all__">All</option>
                     <option value="__unsorted__">Unsorted</option>
