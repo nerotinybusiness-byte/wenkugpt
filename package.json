@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "postinstall": "node scripts/sync_model_viewer_decoders.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint src",

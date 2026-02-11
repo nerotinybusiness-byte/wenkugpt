@@ -4,8 +4,10 @@ import { Sparkles } from 'lucide-react';
 import { type ElementType, useEffect, useState } from 'react';
 
 const ModelViewerTag = 'model-viewer' as unknown as ElementType;
-const BEJROSKA_MODEL_SRC = '/models/bejroska-hoodie.glb?v=2026-02-11-compressed-2';
-const BEJROSKA_COMPAT_MODEL_SRC = '/models/old_bejroska-hoodie.glb?v=2026-02-11-compat-1';
+const BEJROSKA_MODEL_SRC = '/models/bejroska-hoodie.glb?v=2026-02-11-compressed-3';
+const DRACO_DECODER_LOCATION = '/model-viewer/draco/';
+const KTX2_TRANSCODER_LOCATION = '/model-viewer/basis/';
+const MODEL_LOAD_TIMEOUT_MS = 6000;
 
 export default function BejroskaShowcase() {
     const [isReady, setIsReady] = useState(
@@ -13,18 +15,32 @@ export default function BejroskaShowcase() {
     );
     const [loadError, setLoadError] = useState(false);
     const [modelError, setModelError] = useState(false);
-    const [useCompatModel, setUseCompatModel] = useState(false);
     const [isModelLoaded, setIsModelLoaded] = useState(false);
+    const [viewerMountKey, setViewerMountKey] = useState(0);
 
     useEffect(() => {
         let isCancelled = false;
         if (typeof window === 'undefined') return;
-        if (customElements.get('model-viewer')) return;
+
+        const modelViewerGlobal = window as Window & { ModelViewerElement?: unknown };
+        const modelViewerConfig = (modelViewerGlobal.ModelViewerElement ?? {}) as {
+            dracoDecoderLocation?: string;
+            ktx2TranscoderLocation?: string;
+        };
+        modelViewerConfig.dracoDecoderLocation = DRACO_DECODER_LOCATION;
+        modelViewerConfig.ktx2TranscoderLocation = KTX2_TRANSCODER_LOCATION;
+        modelViewerGlobal.ModelViewerElement = modelViewerConfig;
+
+        if (customElements.get('model-viewer')) {
+            setIsReady(true);
+            return;
+        }
 
         void import('@google/model-viewer')
             .then(() => {
                 if (isCancelled) return;
                 setIsReady(Boolean(customElements.get('model-viewer')));
+                setLoadError(false);
             })
             .catch(() => {
                 if (isCancelled) return;
@@ -34,10 +50,29 @@ export default function BejroskaShowcase() {
         return () => {
             isCancelled = true;
         };
-    }, []);
+    }, [viewerMountKey]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        if (loadError || modelError || !isReady || isModelLoaded) return;
+
+        const timeoutId = window.setTimeout(() => {
+            setModelError(true);
+        }, MODEL_LOAD_TIMEOUT_MS);
+
+        return () => {
+            window.clearTimeout(timeoutId);
+        };
+    }, [isModelLoaded, isReady, loadError, modelError, viewerMountKey]);
 
     const shouldFallback = loadError || modelError || !isReady;
-    const modelSrc = useCompatModel ? BEJROSKA_COMPAT_MODEL_SRC : BEJROSKA_MODEL_SRC;
+    const hasTerminalError = loadError || modelError;
+    const handleRetry = () => {
+        setLoadError(false);
+        setModelError(false);
+        setIsModelLoaded(false);
+        setViewerMountKey((value) => value + 1);
+    };
 
     return (
         <div
@@ -53,14 +88,27 @@ export default function BejroskaShowcase() {
                         <Sparkles className="h-5 w-5 text-[var(--c-action)]" />
                     </div>
                     <p className="max-w-[220px] text-sm text-white/80">
-                        Nacitam Bejroska model. Pokud se nezobrazi, zkusim kompatibilni variantu automaticky.
+                        {loadError
+                            ? 'Nacteni 3D vieweru selhalo.'
+                            : modelError
+                                ? 'Model se nepodarilo nacist.'
+                                : 'Nacitam Bejroska model...'}
                     </p>
+                    {hasTerminalError ? (
+                        <button
+                            type="button"
+                            className="rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white transition hover:bg-white/20"
+                            onClick={handleRetry}
+                        >
+                            Retry
+                        </button>
+                    ) : null}
                 </div>
             ) : (
                 <>
                     <ModelViewerTag
-                        key={modelSrc}
-                        src={modelSrc}
+                        key={`${BEJROSKA_MODEL_SRC}-${viewerMountKey}`}
+                        src={BEJROSKA_MODEL_SRC}
                         alt="Bejroska hoodie"
                         camera-controls
                         auto-rotate
@@ -74,14 +122,7 @@ export default function BejroskaShowcase() {
                         loading="eager"
                         style={{ width: '100%', height: '100%', borderRadius: '28px', background: 'transparent' }}
                         onLoad={() => setIsModelLoaded(true)}
-                        onError={() => {
-                            if (!useCompatModel) {
-                                setUseCompatModel(true);
-                                setIsModelLoaded(false);
-                                return;
-                            }
-                            setModelError(true);
-                        }}
+                        onError={() => setModelError(true)}
                     />
                     <div
                         aria-hidden
@@ -90,11 +131,6 @@ export default function BejroskaShowcase() {
                             boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.09), inset 0 -12px 26px rgba(0,0,0,0.35)',
                         }}
                     />
-                    {useCompatModel ? (
-                        <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/35 px-2 py-1 text-[10px] text-white/70">
-                            compat mode
-                        </div>
-                    ) : null}
                     {!isModelLoaded ? (
                         <div className="pointer-events-none absolute bottom-2 right-2 rounded bg-black/35 px-2 py-1 text-[10px] text-white/70">
                             loading...
