@@ -1,37 +1,20 @@
 'use client';
 
 import { Sparkles } from 'lucide-react';
-import { type ElementType, useEffect, useRef, useState } from 'react';
+import { type ElementType, useEffect, useState } from 'react';
 
 const ModelViewerTag = 'model-viewer' as unknown as ElementType;
-const BEJROSKA_MODEL_SRC = '/models/bejroska-hoodie.glb?v=2026-02-11-lightfix-1';
-const BEJROSKA_BASECOLOR_SRC = '/models/bejroska-hoodie-basecolor.jpg?v=2026-02-11-texturefix-1';
-
-type ModelViewerMaterial = {
-    pbrMetallicRoughness?: {
-        setBaseColorTexture?: (texture: unknown) => void;
-        setBaseColorFactor?: (factor: [number, number, number, number]) => void;
-        setMetallicFactor?: (value: number) => void;
-        setRoughnessFactor?: (value: number) => void;
-        baseColorTexture?: unknown;
-    };
-};
-
-type ModelViewerElementLike = HTMLElement & {
-    model?: {
-        materials?: ModelViewerMaterial[];
-    };
-    createTexture?: (url: string) => Promise<unknown>;
-};
+const BEJROSKA_MODEL_SRC = '/models/bejroska-hoodie.glb?v=2026-02-11-compressed-2';
+const BEJROSKA_COMPAT_MODEL_SRC = '/models/old_bejroska-hoodie.glb?v=2026-02-11-compat-1';
 
 export default function BejroskaShowcase() {
-    const viewerRef = useRef<ModelViewerElementLike | null>(null);
     const [isReady, setIsReady] = useState(
         () => typeof window !== 'undefined' && Boolean(customElements.get('model-viewer')),
     );
     const [loadError, setLoadError] = useState(false);
     const [modelError, setModelError] = useState(false);
-    const [textureForced, setTextureForced] = useState(false);
+    const [useCompatModel, setUseCompatModel] = useState(false);
+    const [isModelLoaded, setIsModelLoaded] = useState(false);
 
     useEffect(() => {
         let isCancelled = false;
@@ -53,38 +36,8 @@ export default function BejroskaShowcase() {
         };
     }, []);
 
-    useEffect(() => {
-        const el = viewerRef.current;
-        if (!el) return;
-
-        const applyTextureOverride = async () => {
-            try {
-                const material = el.model?.materials?.[0];
-                const pbr = material?.pbrMetallicRoughness;
-                if (!pbr || !el.createTexture || !pbr.setBaseColorTexture) return;
-
-                const texture = await el.createTexture(BEJROSKA_BASECOLOR_SRC);
-                pbr.setBaseColorTexture(texture);
-                pbr.setBaseColorFactor?.([1, 1, 1, 1]);
-                pbr.setMetallicFactor?.(0);
-                pbr.setRoughnessFactor?.(0.8);
-                setTextureForced(true);
-            } catch {
-                setTextureForced(false);
-            }
-        };
-
-        const onLoad = () => {
-            void applyTextureOverride();
-        };
-
-        el.addEventListener('load', onLoad);
-        return () => {
-            el.removeEventListener('load', onLoad);
-        };
-    }, [isReady]);
-
     const shouldFallback = loadError || modelError || !isReady;
+    const modelSrc = useCompatModel ? BEJROSKA_COMPAT_MODEL_SRC : BEJROSKA_MODEL_SRC;
 
     return (
         <div
@@ -100,14 +53,14 @@ export default function BejroskaShowcase() {
                         <Sparkles className="h-5 w-5 text-[var(--c-action)]" />
                     </div>
                     <p className="max-w-[220px] text-sm text-white/80">
-                        Nacitam Bejroska model. Kdyz zustane bily, zkus Ctrl+F5 a otevri ho znovu.
+                        Nacitam Bejroska model. Pokud se nezobrazi, zkusim kompatibilni variantu automaticky.
                     </p>
                 </div>
             ) : (
                 <>
                     <ModelViewerTag
-                        ref={viewerRef}
-                        src={BEJROSKA_MODEL_SRC}
+                        key={modelSrc}
+                        src={modelSrc}
                         alt="Bejroska hoodie"
                         camera-controls
                         auto-rotate
@@ -115,16 +68,20 @@ export default function BejroskaShowcase() {
                         rotation-per-second="22deg"
                         environment-image="neutral"
                         tone-mapping="aces"
-                        shadow-intensity="0.55"
-                        exposure="1.15"
-                        camera-orbit="8deg 78deg 1.28m"
-                        min-camera-orbit="auto auto 0.95m"
-                        max-camera-orbit="auto auto 1.9m"
-                        field-of-view="30deg"
+                        shadow-intensity="0.8"
+                        exposure="1"
                         interaction-prompt="none"
                         loading="eager"
                         style={{ width: '100%', height: '100%', borderRadius: '28px', background: 'transparent' }}
-                        onError={() => setModelError(true)}
+                        onLoad={() => setIsModelLoaded(true)}
+                        onError={() => {
+                            if (!useCompatModel) {
+                                setUseCompatModel(true);
+                                setIsModelLoaded(false);
+                                return;
+                            }
+                            setModelError(true);
+                        }}
                     />
                     <div
                         aria-hidden
@@ -133,11 +90,16 @@ export default function BejroskaShowcase() {
                             boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.09), inset 0 -12px 26px rgba(0,0,0,0.35)',
                         }}
                     />
-                    {textureForced ? null : (
-                        <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/35 px-2 py-1 text-[10px] text-white/65">
-                            texture sync...
+                    {useCompatModel ? (
+                        <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/35 px-2 py-1 text-[10px] text-white/70">
+                            compat mode
                         </div>
-                    )}
+                    ) : null}
+                    {!isModelLoaded ? (
+                        <div className="pointer-events-none absolute bottom-2 right-2 rounded bg-black/35 px-2 py-1 text-[10px] text-white/70">
+                            loading...
+                        </div>
+                    ) : null}
                 </>
             )}
         </div>
