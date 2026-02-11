@@ -1,14 +1,13 @@
 'use client';
 
-import { Code2, Lightbulb, LayoutTemplate, SlidersHorizontal } from 'lucide-react';
 import { useMemo } from 'react';
 import {
     CHAT_SUGGESTION_POOL,
     EMPTY_STATE_SUGGESTION_COUNT,
     pickRandomSuggestions,
-    type SuggestionIconKey,
     type SuggestionPoolItem,
 } from './suggestionPool';
+import { getCustomSuggestionIcon } from './icons/custom/registry';
 
 interface EmptyStateProps {
     onSuggestionSelect?: (prompt: string) => void;
@@ -19,13 +18,6 @@ export default function EmptyState({ onSuggestionSelect }: EmptyStateProps) {
         () => pickRandomSuggestions(CHAT_SUGGESTION_POOL, EMPTY_STATE_SUGGESTION_COUNT),
         [],
     );
-
-    const iconMap: Record<SuggestionIconKey, typeof Lightbulb> = {
-        idea: Lightbulb,
-        code: Code2,
-        css: SlidersHorizontal,
-        layout: LayoutTemplate,
-    };
 
     return (
         <div className="flex h-full flex-col items-center justify-center p-8">
@@ -57,7 +49,7 @@ export default function EmptyState({ onSuggestionSelect }: EmptyStateProps) {
 
             <div className="grid w-full max-w-4xl grid-cols-1 gap-4 md:grid-cols-2">
                 {suggestions.map((suggestion, index) => {
-                    const SuggestionIcon = iconMap[suggestion.icon] ?? Lightbulb;
+                    const SuggestionIcon = getCustomSuggestionIcon(suggestion.icon);
 
                     return (
                         <button
