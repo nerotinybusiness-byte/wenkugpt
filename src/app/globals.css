@@ -209,17 +209,17 @@
 @keyframes suggestionCardPopIn {
   0% {
     opacity: 0;
-    transform: translate3d(-5px, -5px, 0) scale(0.992);
+    transform: translate3d(0, 12px, 0);
   }
 
-  60% {
+  70% {
     opacity: 1;
-    transform: translate3d(-1px, -1px, 0) scale(0.998);
+    transform: translate3d(0, 1px, 0);
   }
 
   100% {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: translate3d(0, 0, 0);
   }
 }
 
@@ -325,9 +325,12 @@
 
   .suggestion-card-pop {
     animation-name: suggestionCardPopIn;
-    animation-duration: 520ms;
-    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    animation-duration: 460ms;
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
     animation-fill-mode: both;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+    contain: paint;
     will-change: transform, opacity;
   }
 }
