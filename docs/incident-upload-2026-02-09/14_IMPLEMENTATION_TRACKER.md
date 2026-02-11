@@ -113,3 +113,15 @@ Fix missing `x-user-email` propagation in browser API requests.
 4. `done` Verify `GET /api/documents` reads OCR engine metadata fields without DB/runtime errors.
 5. `done` Deploy current branch and confirm alias points to deployment `dpl_FjkzRouUgBSRjfyFCBYUr3m1H9EF`.
 6. `in_progress` Final browser UX regression pass and telemetry follow-up (`ingest_ocr_warning_codes`, latency by engine).
+
+## Zero-chunk scan hardening track (2026-02-11)
+1. `done` Add OCR re-chunk fallback for short OCR text (`minTokens=1`) when default chunking yields 0 chunks.
+2. `done` Add warning code `ocr_rescue_short_text_fallback_chunk` in OCR rescue diagnostics.
+3. `done` Mark document as `failed` with explicit `processingError` when final chunk count is 0.
+4. `done` Add ingest telemetry/log keys `chunk_count_after_ocr` and `document_final_status`.
+5. `done` Update preview route to return `DOCUMENT_PREVIEW_EMPTY` for failed docs without chunks and `DOCUMENT_NOT_FOUND` for missing docs.
+6. `done` Update upload UI to treat ingest `chunkCount === 0` as user-visible error (not success).
+7. `done` Disable preview action in file list for failed docs (tooltip explains no extracted text).
+8. `done` Add tests: OCR rescue fallback + preview route behavior (`failed+empty`, `exists+chunks`, `missing`).
+9. `done` Run full gates (`tsc`, `lint`, `test:run`, `build`).
+10. `in_progress` Commit, push, and deploy current hardening patch.

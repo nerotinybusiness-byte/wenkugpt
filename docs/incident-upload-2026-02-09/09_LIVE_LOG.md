@@ -241,3 +241,22 @@ Use this file as append-only progress log.
   - deployment URL: `https://wenkugpt-copy-2a7ezi84x-nerotinys-projects.vercel.app`
   - alias `https://wenkugpt-copy.vercel.app` points to this deployment.
 - Current status: production schema and OCR engine rollout are aligned; final browser UX regression and telemetry monitoring continue.
+- Implemented ingest hardening for scan/image-only PDFs with weak text extraction:
+  - added OCR re-chunk fallback path (`minTokens=1`) when OCR returns short text but standard chunking yields `0` chunks.
+  - added warning code `ocr_rescue_short_text_fallback_chunk`.
+  - document persistence now marks ingest as `failed` when final `chunkRecords.length === 0` with explicit `processingError` (`No indexable text extracted from document (OCR produced no usable text).`).
+  - added final ingest telemetry/log fields for debugging: `chunk_count_after_ocr`, `document_final_status`.
+- Implemented preview API clarity for empty/failed docs:
+  - `GET /api/documents/[id]/preview` now loads document metadata first.
+  - returns `DOCUMENT_NOT_FOUND` when document does not exist.
+  - returns `DOCUMENT_PREVIEW_EMPTY` (409) for existing `failed` docs without chunks.
+- Updated ingest UI behavior to avoid false-success state:
+  - upload result now checks `data.stats.chunkCount` and sets error state when `chunkCount === 0`.
+  - file list disables preview button for `processingStatus='failed'` docs and shows explicit tooltip.
+- Validation after implementation:
+  - `npm run test:run -- src/lib/ingest/__tests__/ocr-rescue.test.ts src/app/api/documents/__tests__/route.preview.test.ts` passed.
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run test:run` passed (`80/80`).
+  - `npm run build` passed.
+- Current status: code + tests complete for zero-chunk scan hardening; commit/push/deploy in progress.

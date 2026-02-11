@@ -305,6 +305,7 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                 {filteredDocuments.map((doc) => {
                     const isSelected = selectedIds.has(doc.id);
                     const isDeleting = deletingIds.has(doc.id);
+                    const previewDisabled = doc.processingStatus === 'failed';
                     const templateInfo = doc.templateMatched
                         ? `Template ${doc.templateProfileId || 'unknown'} (${Math.round((doc.templateMatchScore || 0) * 100)}%), filtered ${doc.templateBoilerplateChunks || 0}`
                         : null;
@@ -416,8 +417,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                                         onClick={() => {
                                             void openPreview(doc);
                                         }}
-                                        className="p-2 hover:bg-white/10 rounded-md transition-all text-white/40 hover:text-white"
-                                        title="Preview document"
+                                        disabled={previewDisabled}
+                                        className="p-2 hover:bg-white/10 rounded-md transition-all text-white/40 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-white/40"
+                                        title={previewDisabled ? 'Preview unavailable: no extracted text' : 'Preview document'}
                                     >
                                         <Eye className="w-4 h-4" />
                                     </button>

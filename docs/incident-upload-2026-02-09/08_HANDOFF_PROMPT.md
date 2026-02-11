@@ -53,3 +53,11 @@ Post-rollout update (2026-02-11):
    - deployment id `dpl_FjkzRouUgBSRjfyFCBYUr3m1H9EF`
    - alias `https://wenkugpt-copy.vercel.app` updated.
 5. Immediate objective is now browser UX closure + telemetry monitoring, not DB migration rollout.
+
+Zero-chunk scan hardening update (2026-02-11):
+1. Root cause addressed for docs that reached `Ready` with `0` chunks.
+2. OCR rescue now includes short-text re-chunk fallback (`minTokens=1`) before declaring no usable output.
+3. If final chunk count is still zero, document is persisted as `failed` with explicit `processingError`.
+4. Preview endpoint now returns explicit `DOCUMENT_PREVIEW_EMPTY` for failed docs without chunks.
+5. Upload UI now maps ingest `stats.chunkCount === 0` to error state (not success) and file list disables preview for failed docs.
+6. Validation gates are green (`tsc`, `lint`, `test:run`, `build`); deployment step follows.

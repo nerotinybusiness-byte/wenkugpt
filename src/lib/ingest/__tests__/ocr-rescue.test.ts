@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ParsedPage } from '../parser';
 import {
     mergeOcrTextIntoPages,
+    rechunkPagesAfterOcr,
     resolveOcrCandidatePages,
     shouldTriggerOcrRescue,
 } from '../ocr-rescue';
@@ -54,6 +55,23 @@ describe('OCR rescue helpers', () => {
 
         expect(merged[0].fullText).toBe('Ahoj');
         expect(merged[1].fullText).toContain('OCR obsah');
+    });
+
+    it('creates fallback chunk for short OCR text when standard chunking would produce zero chunks', () => {
+        const pages = [makePage(1, 'Jiri Zabilansky 603 582 150')];
+        const result = rechunkPagesAfterOcr(pages);
+
+        expect(result.usedShortTextFallback).toBe(true);
+        expect(result.chunks.length).toBeGreaterThan(0);
+        expect(result.chunks[0].text).toContain('603 582 150');
+    });
+
+    it('keeps zero chunks when OCR text is empty', () => {
+        const pages = [makePage(1, '')];
+        const result = rechunkPagesAfterOcr(pages);
+
+        expect(result.usedShortTextFallback).toBe(false);
+        expect(result.chunks.length).toBe(0);
     });
 
     it('maps OCR failures to deterministic warning codes', () => {

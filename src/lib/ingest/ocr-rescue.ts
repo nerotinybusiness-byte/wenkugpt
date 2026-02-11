@@ -1,4 +1,9 @@
 import type { ParsedPage } from './parser';
+import {
+    chunkDocument,
+    DEFAULT_CHUNKER_CONFIG,
+    type SemanticChunk,
+} from './chunker';
 
 export const OCR_LOW_CHUNK_THRESHOLD = 2;
 const OCR_PAGE_TEXT_LENGTH_THRESHOLD = 120;
@@ -32,4 +37,29 @@ export function mergeOcrTextIntoPages(
             fullText: [page.fullText, ocrText].filter(Boolean).join('\n').trim(),
         };
     });
+}
+
+export interface OcrRechunkResult {
+    chunks: SemanticChunk[];
+    usedShortTextFallback: boolean;
+}
+
+export function rechunkPagesAfterOcr(pages: ParsedPage[]): OcrRechunkResult {
+    const standardChunks = chunkDocument(pages, DEFAULT_CHUNKER_CONFIG);
+    if (standardChunks.length > 0) {
+        return {
+            chunks: standardChunks,
+            usedShortTextFallback: false,
+        };
+    }
+
+    const fallbackChunks = chunkDocument(pages, {
+        ...DEFAULT_CHUNKER_CONFIG,
+        minTokens: 1,
+    });
+
+    return {
+        chunks: fallbackChunks,
+        usedShortTextFallback: fallbackChunks.length > 0,
+    };
 }

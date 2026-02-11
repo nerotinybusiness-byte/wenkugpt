@@ -11,6 +11,7 @@ import { runOcrRescueProvider, resolveOcrEngine } from './ocr-provider';
 import type { OcrEngine } from './ocr';
 import {
     mergeOcrTextIntoPages,
+    rechunkPagesAfterOcr,
     resolveOcrCandidatePages,
     shouldTriggerOcrRescue,
 } from './ocr-rescue';
@@ -68,6 +69,8 @@ export interface OcrRescueDiagnostics {
     pagesAttempted: number;
     warnings: string[];
 }
+
+const EMPTY_INDEXABLE_TEXT_ERROR = 'No indexable text extracted from document (OCR produced no usable text).';
 
 /**
  * Generate SHA-256 hash of content
@@ -314,9 +317,13 @@ export async function processPipeline(
                     }
                 } else {
                     workingPages = mergeOcrTextIntoPages(workingPages, providerResult.ocrByPage);
-                    const rescuedChunks = chunkDocument(workingPages, DEFAULT_CHUNKER_CONFIG);
+                    const rescueChunkingResult = rechunkPagesAfterOcr(workingPages);
+                    const rescuedChunks = rescueChunkingResult.chunks;
                     ocrRescue.chunksAfter = rescuedChunks.length;
                     ocrRescue.applied = rescuedChunks.length > ocrRescue.chunksBefore;
+                    if (rescueChunkingResult.usedShortTextFallback) {
+                        ocrRescue.warnings.push('ocr_rescue_short_text_fallback_chunk');
+                    }
                     if (ocrRescue.applied) {
                         chunks = rescuedChunks;
                     } else {
@@ -331,6 +338,7 @@ export async function processPipeline(
                     ingest_ocr_engine_fallback_rate: providerResult.fallbackEngine ? 1 : 0,
                     ingest_ocr_rescue_success_rate_by_engine: ocrRescue.applied ? 1 : 0,
                     ingest_ocr_latency_ms: Math.round(providerResult.latencyMs),
+                    chunk_count_after_ocr: ocrRescue.chunksAfter,
                     ingest_ocr_warning_codes: ocrRescue.warnings,
                 });
             }
@@ -504,6 +512,12 @@ export async function processPipeline(
                             : sql`to_tsvector('simple', ${chunk.text})`,
                     };
                 });
+                const documentFinalStatus = chunkRecords.length > 0
+                    ? 'completed'
+                    : 'failed';
+                const documentProcessingError = documentFinalStatus === 'failed'
+                    ? EMPTY_INDEXABLE_TEXT_ERROR
+                    : null;
 
                 // Batch insert chunks (100 at a time for Supabase).
                 const BATCH_SIZE = 100;
@@ -513,11 +527,11 @@ export async function processPipeline(
                     devLog(`   Inserted chunk batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunkRecords.length / BATCH_SIZE)}`);
                 }
 
-                // Update document status to completed.
+                // Update document status after chunk persistence.
                 await tx.update(documents)
                     .set({
-                        processingStatus: 'completed',
-                        processingError: null,
+                        processingStatus: documentFinalStatus,
+                        processingError: documentProcessingError,
                         templateProfileId: templateResult.diagnostics.profileId,
                         templateMatched: templateResult.diagnostics.matched,
                         templateMatchScore: templateResult.diagnostics.matchScore,
@@ -539,7 +553,14 @@ export async function processPipeline(
                     })
                     .where(eq(documents.id, doc.id));
 
-                devLog('   Document status: completed');
+                devLog(`   Document status: ${documentFinalStatus}`);
+                logInfo('Ingest final status', {
+                    route: 'ingest',
+                    stage: 'storage',
+                    document_id: doc.id,
+                    document_final_status: documentFinalStatus,
+                    chunk_count_after_ocr: chunks.length,
+                });
             });
         } catch (error) {
             logError('Storage error in ingestion pipeline', { filename, mimeType }, error);

@@ -39,6 +39,15 @@ interface OcrRescueDiagnostics {
     warnings: string[];
 }
 
+interface IngestStats {
+    pageCount: number;
+    chunkCount: number;
+    indexableChunkCount: number;
+    boilerplateChunkCount: number;
+    totalTokens: number;
+    processingTimeMs: number;
+}
+
 interface ApiSuccess<T> {
     success: true;
     data: T;
@@ -166,6 +175,7 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
             const raw = await response.text();
             let payload: ApiResponse<{
                 documentId: string;
+                stats: IngestStats;
                 template?: TemplateUploadDiagnostics;
                 ocrRescue?: OcrRescueDiagnostics;
             }> | null = null;
@@ -174,6 +184,7 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                 try {
                     payload = JSON.parse(raw) as ApiResponse<{
                         documentId: string;
+                        stats: IngestStats;
                         template?: TemplateUploadDiagnostics;
                         ocrRescue?: OcrRescueDiagnostics;
                     }>;
@@ -187,6 +198,20 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
             }
             if (!payload?.success) {
                 throw new Error(payload?.error || 'Upload failed');
+            }
+
+            const chunkCount = payload.data.stats?.chunkCount ?? 0;
+            if (chunkCount === 0) {
+                setFiles((prev) => prev.map((f) => {
+                    if (f.id !== fileWrapper.id) return f;
+                    return {
+                        ...f,
+                        status: 'error',
+                        message: 'Dokument byl nahran, ale nebyl z nej extrahovan pouzitelny text. Zkuste kvalitnejsi scan nebo OCR/TXT.',
+                    };
+                }));
+                if (onUploadComplete) onUploadComplete();
+                return;
             }
 
             const templateDiagnostics = payload.data.template;
