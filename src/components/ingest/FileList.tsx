@@ -444,8 +444,16 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
             </div>
 
             {previewDoc && canUsePortal && createPortal(
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                    <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-white/10 rounded-xl flex flex-col shadow-2xl">
+                <div
+                    className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm pointer-events-auto"
+                    onClick={closePreview}
+                >
+                    <div
+                        className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-white/10 rounded-xl flex flex-col shadow-2xl pointer-events-auto"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                        }}
+                    >
                         <div className="flex items-center justify-between p-4 border-b border-white/10">
                             <h3 className="font-semibold text-lg flex items-center gap-2">
                                 <FileText className="w-5 h-5 text-emerald-500" />
@@ -484,3 +492,4 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
         </div>
     );
 }
+
