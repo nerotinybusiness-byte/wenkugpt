@@ -61,3 +61,7 @@ Zero-chunk scan hardening update (2026-02-11):
 4. Preview endpoint now returns explicit `DOCUMENT_PREVIEW_EMPTY` for failed docs without chunks.
 5. Upload UI now maps ingest `stats.chunkCount === 0` to error state (not success) and file list disables preview for failed docs.
 6. Validation gates are green (`tsc`, `lint`, `test:run`, `build`); deployment step follows.
+7. Deployment completed:
+   - commit `6f035cb`
+   - `https://wenkugpt-copy-agizq24wt-nerotinys-projects.vercel.app`
+   - alias `https://wenkugpt-copy.vercel.app` updated.

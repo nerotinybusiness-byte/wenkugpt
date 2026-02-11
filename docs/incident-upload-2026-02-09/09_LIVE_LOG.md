@@ -260,3 +260,8 @@ Use this file as append-only progress log.
   - `npm run test:run` passed (`80/80`).
   - `npm run build` passed.
 - Current status: code + tests complete for zero-chunk scan hardening; commit/push/deploy in progress.
+- Zero-chunk hardening rollout completed:
+  - commit: `6f035cb` pushed to `feat/rag-engine-switch`.
+  - production deployment: `https://wenkugpt-copy-agizq24wt-nerotinys-projects.vercel.app`.
+  - alias `https://wenkugpt-copy.vercel.app` points to this deployment.
+- Current status: zero-chunk scan hardening is deployed to production; monitor runtime behavior on real scan uploads.

@@ -124,4 +124,4 @@ Fix missing `x-user-email` propagation in browser API requests.
 7. `done` Disable preview action in file list for failed docs (tooltip explains no extracted text).
 8. `done` Add tests: OCR rescue fallback + preview route behavior (`failed+empty`, `exists+chunks`, `missing`).
 9. `done` Run full gates (`tsc`, `lint`, `test:run`, `build`).
-10. `in_progress` Commit, push, and deploy current hardening patch.
+10. `done` Commit, push, and deploy current hardening patch (`6f035cb`, `https://wenkugpt-copy-agizq24wt-nerotinys-projects.vercel.app`, alias updated).
