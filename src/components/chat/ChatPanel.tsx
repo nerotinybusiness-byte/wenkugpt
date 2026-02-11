@@ -669,7 +669,12 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                 title="Bejroska activated!"
                 subtitle="Wenku hoodie showcase"
                 autoClose={false}
-                holeRadius={140}
+                holeRadius={152}
+                blurPx={4}
+                dimOpacity={0.82}
+                ringThickness={6}
+                glowSize={26}
+                particleCount={140}
             >
                 <BejroskaShowcase />
             </SpotlightConfetti>
