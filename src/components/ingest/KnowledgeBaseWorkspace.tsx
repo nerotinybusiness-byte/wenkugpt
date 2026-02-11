@@ -23,8 +23,8 @@ export default function KnowledgeBaseWorkspace({
     };
 
     return (
-        <div className={cn('flex-1 grid md:grid-cols-[1fr_1.5fr] gap-0 divide-x divide-white/10', className)}>
-            <div className={cn('p-8 bg-white/[0.02]', leftPaneClassName)}>
+        <div className={cn('flex-1 h-full min-h-0 grid md:grid-cols-[1fr_1.5fr] gap-0 divide-x divide-white/10', className)}>
+            <div className={cn('min-h-0 p-8 bg-white/[0.02]', leftPaneClassName)}>
                 <div className="max-w-md mx-auto space-y-8">
                     <div>
                         <h2 className="text-lg font-medium mb-2">Upload Documents</h2>
@@ -42,8 +42,8 @@ export default function KnowledgeBaseWorkspace({
                 </div>
             </div>
 
-            <div className={cn('flex flex-col', rightPaneClassName)}>
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar-wide">
+            <div className={cn('min-h-0 flex flex-col', rightPaneClassName)}>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 custom-scrollbar-wide">
                     <FileList refreshTrigger={refreshTrigger} />
                 </div>
             </div>
