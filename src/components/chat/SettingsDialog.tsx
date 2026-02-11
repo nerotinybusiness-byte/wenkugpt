@@ -89,6 +89,9 @@ export function SettingsDialog() {
     const sliderStyles = isDark
         ? "[&_[data-slot=slider-track]]:bg-[#27272a] [&_[data-slot=slider-range]]:bg-[#aaff00] [&_[data-slot=slider-thumb]]:border-[#aaff00]"
         : "[&_[data-slot=slider-track]]:bg-[#e4e4e7] [&_[data-slot=slider-range]]:bg-[#65a30d] [&_[data-slot=slider-thumb]]:border-[#65a30d]";
+    const ingestSwitchStyles = isDark
+        ? "data-[state=checked]:bg-[#aaff00] data-[state=unchecked]:bg-[#3f3f46] border border-[#71717a]"
+        : "data-[state=checked]:bg-[#65a30d] data-[state=unchecked]:bg-[#d4d4d8] border border-[#a1a1aa]";
 
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -371,10 +374,22 @@ export function SettingsDialog() {
                                     Applies only to PDF uploads when the first chunking pass returns zero or very few chunks.
                                 </p>
                             </div>
-                            <Switch
-                                checked={settings.emptyChunkOcrEnabled}
-                                onCheckedChange={settings.setEmptyChunkOcrEnabled}
-                            />
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => settings.setEmptyChunkOcrEnabled(!settings.emptyChunkOcrEnabled)}
+                                    className={`${isDark ? 'border-[#71717a] text-[#e4e4e7] hover:bg-[#27272a]' : 'border-[#a1a1aa] text-[#27272a] hover:bg-[#f4f4f5]'} h-8 px-3 text-xs font-semibold`}
+                                >
+                                    {settings.emptyChunkOcrEnabled ? 'ON' : 'OFF'}
+                                </Button>
+                                <Switch
+                                    checked={settings.emptyChunkOcrEnabled}
+                                    onCheckedChange={settings.setEmptyChunkOcrEnabled}
+                                    className={ingestSwitchStyles}
+                                    aria-label="OCR rescue on/off"
+                                />
+                            </div>
                         </div>
 
                         <div className="space-y-2">
