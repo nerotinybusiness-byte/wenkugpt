@@ -14,6 +14,7 @@ import { FileText, MessageSquarePlus, History, Trash2 } from 'lucide-react';
 
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
+import EmptyState from './EmptyState';
 import type { CitationPayload } from './CitationLink';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import { SettingsDialog } from './SettingsDialog';
@@ -589,11 +590,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                         aria-relevant="additions"
                     >
                         {messages.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-center opacity-50 space-y-4 pt-20">
-                                <FileText size={48} className="text-[var(--c-content)]" />
-                                <h2 className="text-2xl font-bold text-[var(--c-content)]">WenkuGPT</h2>
-                                <p className="text-[var(--c-content)]">Start a conversation below.</p>
-                            </div>
+                            <EmptyState onSuggestionSelect={handleSendMessage} />
                         ) : (
                             messages.map((message) => (
                                 <ChatMessage
