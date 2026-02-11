@@ -2,7 +2,7 @@
 
 Last Updated: 2026-02-11
 Incident Scope: Upload failures in Knowledge Base UI (`DOMMatrix is not defined`) and API auth failures (`Missing identity header. Set x-user-email.`)
-Status: Incident baseline stabilized; PDF citation highlight precision remediation is in progress.
+Status: Production schema drift resolved and OCR engine switch rollout completed; residual browser validation and telemetry monitoring remain.
 
 ## Maintenance policy
 This folder is a living runbook.
@@ -43,4 +43,5 @@ The objective is zero context loss across chat windows.
 - New focus (2026-02-11): OCR rescue engine switch (`gemini`/`tesseract`) with user-level setting, no-fallback policy, and warning-only behavior.
 
 ## Immediate next action
-Ship end-to-end PDF highlight precision fix, then reupload/reingest documents and validate on the known problematic citation flow.
+Run final browser UX regression pass on aliased production (upload/chat/citation click), then continue monitoring OCR warning and latency telemetry after migration rollout.
+

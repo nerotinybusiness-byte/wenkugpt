@@ -1,4 +1,4 @@
-﻿# Risks And Open Questions
+# Risks And Open Questions
 
 ## Active risks
 1. Identity source ambiguity on client
@@ -37,7 +37,7 @@
 8. Migration drift between runtime code and production DB schema (opened 2026-02-10)
 - Risk: code writes newly introduced columns (e.g., `chunks.highlight_text`) before migration is applied on target DB, causing ingest runtime failures (`PG 42703`).
 - Mitigation: immediate DB hotfix + ingest schema preflight (`schema-health`) + strict schema check script in deployment runbook.
-- Status: mitigated (service restored, guardrails deployed; continue monitoring).
+- Status: closed for current schema baseline (migrations 0005-0007 applied and preflight checks green); keep deployment guardrail active.
 
 9. Template detection quality drift (opened 2026-02-10)
 - Risk: false-positive/false-negative template matches can over-filter useful chunks or under-filter boilerplate, impacting answer quality.
@@ -92,3 +92,10 @@
 - Live log updated with closure note.
 - Template-aware ingest migration applied and schema preflight green on target environment.
 - Template flags rolled out with stable telemetry (no regression in retrieval quality/latency).
+
+
+## Update 2026-02-11 (post-migration rollout)
+- Closed immediate production blocker behind `Ingest schema preflight failed` by aligning DB schema with backend expectations.
+- Confirmed migrations `0005`, `0006`, and `0007` are applied on production DB used by deployed app.
+- Confirmed schema health command is green (`ingest_schema_ok=true`) and no required ingest columns are missing.
+- Confirmed OCR rescue behavior remains warning-only under provider unavailability (`tesseract` path) and does not hard-fail ingest.

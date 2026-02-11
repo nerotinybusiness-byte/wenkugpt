@@ -1,4 +1,4 @@
-﻿# Handoff Prompt (Paste into Next Window)
+# Handoff Prompt (Paste into Next Window)
 
 Use this exact brief to continue without re-discovery:
 
@@ -39,3 +39,17 @@ Constraints:
 - Keep docs current after each material change.
 - Include exact file references and verification outputs in summaries.
 ---
+
+
+Post-rollout update (2026-02-11):
+1. Production DB migrations applied: `0005`, `0006`, `0007`.
+2. Schema preflight check passed: `npm run db:check-ingest-schema` -> `ingest_schema_ok=true`.
+3. OCR rescue smoke matrix passed on alias `https://wenkugpt-copy.vercel.app`:
+   - OFF path warning-only (`ocr_rescue_disabled`).
+   - ON+gemini success.
+   - ON+tesseract success with warning-only unavailable behavior when provider unavailable.
+4. Latest deployment:
+   - `https://wenkugpt-copy-2a7ezi84x-nerotinys-projects.vercel.app`
+   - deployment id `dpl_FjkzRouUgBSRjfyFCBYUr3m1H9EF`
+   - alias `https://wenkugpt-copy.vercel.app` updated.
+5. Immediate objective is now browser UX closure + telemetry monitoring, not DB migration rollout.

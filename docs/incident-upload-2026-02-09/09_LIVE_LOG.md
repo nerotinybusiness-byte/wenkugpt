@@ -228,3 +228,16 @@ Use this file as append-only progress log.
   - `npm run build` passed.
 - Current status: OCR engine switch changes are implemented and locally validated; migration `0007` rollout on target DB remains.
 
+- Executed production DB schema alignment for ingest/template/OCR tracks:
+  - applied SQL migrations on production DB: `0005_template_aware_ingest.sql`, `0006_empty_chunk_ocr_rescue.sql`, `0007_ocr_engine_switch.sql`.
+  - verified schema health via `npm run db:check-ingest-schema` -> `ingest_schema_ok=true` with no missing columns.
+- Ran production ingest smoke matrix on aliased app `https://wenkugpt-copy.vercel.app`:
+  - OCR rescue OFF: `POST /api/ingest` returned `200`, `success=true`, warning `ocr_rescue_disabled`.
+  - OCR rescue ON + engine `gemini`: `POST /api/ingest` returned `200`, `success=true`.
+  - OCR rescue ON + engine `tesseract`: `POST /api/ingest` returned `200`, `success=true`; provider-unavailable path stayed warning-only (`ocr_rescue_tesseract_unavailable`).
+  - `GET /api/documents?limit=1` returned `200`, `success=true`, and OCR metadata fields were readable (`ocrRescueEngine`, `ocrRescueFallbackEngine`).
+- Deployed latest production build:
+  - deployment id: `dpl_FjkzRouUgBSRjfyFCBYUr3m1H9EF`
+  - deployment URL: `https://wenkugpt-copy-2a7ezi84x-nerotinys-projects.vercel.app`
+  - alias `https://wenkugpt-copy.vercel.app` points to this deployment.
+- Current status: production schema and OCR engine rollout are aligned; final browser UX regression and telemetry monitoring continue.

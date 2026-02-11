@@ -104,3 +104,12 @@ Fix missing `x-user-email` propagation in browser API requests.
 7. `done` Extend ingest/documents API payload contracts and endpoint docs string.
 8. `done` Add unit/API/schema tests for provider routing, tesseract path, options sanitize, and metadata mapping.
 9. `done` Run full validation gates (`tsc`, `lint`, `test:run`, `build`) and record closure evidence.
+
+
+## OCR switch production rollout follow-up (2026-02-11)
+1. `done` Apply production DB migrations `0005_template_aware_ingest.sql`, `0006_empty_chunk_ocr_rescue.sql`, `0007_ocr_engine_switch.sql`.
+2. `done` Verify strict preflight schema health via `npm run db:check-ingest-schema` (`ingest_schema_ok=true`, no missing columns).
+3. `done` Run production smoke matrix for OCR rescue OFF / ON+gemini / ON+tesseract (warning-only unavailable path confirmed).
+4. `done` Verify `GET /api/documents` reads OCR engine metadata fields without DB/runtime errors.
+5. `done` Deploy current branch and confirm alias points to deployment `dpl_FjkzRouUgBSRjfyFCBYUr3m1H9EF`.
+6. `in_progress` Final browser UX regression pass and telemetry follow-up (`ingest_ocr_warning_codes`, latency by engine).
