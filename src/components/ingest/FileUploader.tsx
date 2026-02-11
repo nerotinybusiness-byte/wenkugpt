@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
+import { useTheme } from 'next-themes';
 import { Upload, FileText, Loader2, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/lib/api/client-request';
@@ -89,6 +90,8 @@ function isAllowedFile(file: File): boolean {
 }
 
 export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
+    const { resolvedTheme } = useTheme();
+    const isDark = resolvedTheme !== 'light';
     const [isDragging, setIsDragging] = useState(false);
     const [files, setFiles] = useState<FileWithStatus[]>([]);
     const [folderName, setFolderName] = useState('');
@@ -269,7 +272,9 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                     flex flex-col items-center justify-center p-8 min-h-[160px]
                     ${isDragging
                         ? 'border-emerald-500 bg-emerald-500/10 scale-[1.01]'
-                        : 'border-white/10 hover:border-white/20 hover:bg-white/5'
+                        : isDark
+                            ? 'border-white/10 hover:border-white/20 hover:bg-white/5'
+                            : 'border-black/15 hover:border-black/25 hover:bg-black/[0.03]'
                     }
                 `}
                 onDragOver={handleDragOver}
@@ -289,16 +294,16 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                     className="text-center select-none cursor-pointer flex flex-col items-center"
                     onClick={() => !isUploading && fileInputRef.current?.click()}
                 >
-                    <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
-                        <Upload className={`w-6 h-6 text-white/40 ${isDragging ? 'text-emerald-500' : ''}`} />
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${isDark ? 'bg-white/5' : 'bg-black/[0.06]'}`}>
+                        <Upload className={`w-6 h-6 ${isDragging ? 'text-emerald-500' : isDark ? 'text-white/40' : 'text-zinc-500'}`} />
                     </div>
                     <h3 className="text-base font-medium">Drop PDF/TXT files here</h3>
-                    <p className="text-xs text-white/40 mt-1 uppercase tracking-wider">Max 50MB - Multiple Files</p>
+                    <p className={`text-xs mt-1 uppercase tracking-wider ${isDark ? 'text-white/40' : 'text-zinc-500'}`}>Max 50MB - Multiple Files</p>
                 </div>
             </div>
 
             <div className="space-y-1">
-                <label className="text-xs font-semibold uppercase tracking-wider text-white/50">
+                <label className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-white/50' : 'text-zinc-600'}`}>
                     Folder (optional)
                 </label>
                 <input
@@ -307,9 +312,11 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                     onChange={(e) => setFolderName(e.target.value)}
                     placeholder="e.g. Kontakty, Faktury 2026..."
                     disabled={isUploading}
-                    className="w-full h-9 rounded-md bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-white/25 disabled:opacity-60"
+                    className={`w-full h-9 rounded-md border px-3 text-sm focus:outline-none disabled:opacity-60 ${isDark
+                        ? 'bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-white/25'
+                        : 'bg-black/[0.03] border-black/15 text-zinc-900 placeholder:text-zinc-500 focus:border-black/35'}`}
                 />
-                <p className="text-[11px] text-white/40">
+                <p className={`text-[11px] ${isDark ? 'text-white/40' : 'text-zinc-500'}`}>
                     Type a new name to create a folder on first upload.
                 </p>
             </div>
@@ -317,7 +324,7 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
             {files.length > 0 && (
                 <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
                     {files.map((wrap) => (
-                        <div key={wrap.id} className="bg-white/5 rounded-lg p-3 flex items-center gap-3 border border-white/10">
+                        <div key={wrap.id} className={`rounded-lg p-3 flex items-center gap-3 border ${isDark ? 'bg-white/5 border-white/10' : 'bg-black/[0.03] border-black/10'}`}>
                             <FileText
                                 className={`w-5 h-5 ${wrap.status === 'success'
                                     ? 'text-emerald-500'
@@ -330,10 +337,10 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                             <div className="flex-1 min-w-0">
                                 <div className="flex justify-between items-center mb-0.5">
                                     <p className="text-sm font-medium truncate">{wrap.file.name}</p>
-                                    <span className="text-xs text-white/30 ml-2">{(wrap.file.size / 1024 / 1024).toFixed(1)} MB</span>
+                                    <span className={`text-xs ml-2 ${isDark ? 'text-white/30' : 'text-zinc-500'}`}>{(wrap.file.size / 1024 / 1024).toFixed(1)} MB</span>
                                 </div>
                                 <div className="text-xs">
-                                    {wrap.status === 'pending' && <span className="text-white/40">Ready to upload</span>}
+                                    {wrap.status === 'pending' && <span className={isDark ? 'text-white/40' : 'text-zinc-500'}>Ready to upload</span>}
                                     {wrap.status === 'uploading' && <span className="text-blue-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Uploading...</span>}
                                     {wrap.status === 'processing' && <span className="text-indigo-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Processing...</span>}
                                     {wrap.status === 'success' && <span className="text-emerald-400 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> {wrap.message || 'Complete'}</span>}
@@ -344,7 +351,9 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                             {wrap.status !== 'uploading' && wrap.status !== 'processing' && (
                                 <button
                                     onClick={() => removeFile(wrap.id)}
-                                    className="p-1 hover:bg-white/10 rounded-full transition-colors text-white/30 hover:text-white"
+                                    className={`p-1 rounded-full transition-colors ${isDark
+                                        ? 'hover:bg-white/10 text-white/30 hover:text-white'
+                                        : 'hover:bg-black/10 text-zinc-500 hover:text-zinc-800'}`}
                                 >
                                     <X className="w-4 h-4" />
                                 </button>

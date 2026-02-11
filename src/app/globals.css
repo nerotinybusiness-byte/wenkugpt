@@ -308,17 +308,36 @@
 }
 
 .folder-filter-select {
+  color-scheme: light;
+  background-color: #ffffff;
+  color: #1f2937;
+}
+
+.folder-filter-select option {
+  background-color: #ffffff;
+  color: #111827;
+}
+
+.folder-filter-select option:checked {
+  background-color: #dcfce7;
+  color: #14532d;
+}
+
+:root[data-theme="dark"] .folder-filter-select,
+body[data-theme="dark"] .folder-filter-select {
   color-scheme: dark;
   background-color: color-mix(in srgb, var(--c-content) 8%, transparent);
   color: color-mix(in srgb, var(--c-light) 90%, transparent);
 }
 
-.folder-filter-select option {
+:root[data-theme="dark"] .folder-filter-select option,
+body[data-theme="dark"] .folder-filter-select option {
   background-color: #1f2126;
   color: #eef2f7;
 }
 
-.folder-filter-select option:checked {
+:root[data-theme="dark"] .folder-filter-select option:checked,
+body[data-theme="dark"] .folder-filter-select option:checked {
   background-color: #2f6ea6;
   color: #ffffff;
 }

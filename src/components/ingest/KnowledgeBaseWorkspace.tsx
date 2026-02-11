@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTheme } from 'next-themes';
 import FileUploader from '@/components/ingest/FileUploader';
 import FileList from '@/components/ingest/FileList';
 import { cn } from '@/lib/utils';
@@ -16,6 +17,8 @@ export default function KnowledgeBaseWorkspace({
     leftPaneClassName,
     rightPaneClassName,
 }: KnowledgeBaseWorkspaceProps) {
+    const { resolvedTheme } = useTheme();
+    const isDark = resolvedTheme !== 'light';
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     const handleUploadComplete = () => {
@@ -23,20 +26,23 @@ export default function KnowledgeBaseWorkspace({
     };
 
     return (
-        <div className={cn('flex-1 h-full min-h-0 grid md:grid-cols-[1fr_1.5fr] gap-0 divide-x divide-white/10', className)}>
-            <div className={cn('min-h-0 p-8 bg-white/[0.02]', leftPaneClassName)}>
+        <div className={cn(`flex-1 h-full min-h-0 grid md:grid-cols-[1fr_1.5fr] gap-0 ${isDark ? 'divide-x divide-white/10' : 'divide-x divide-black/10'}`, className)}>
+            <div className={cn(`min-h-0 p-8 ${isDark ? 'bg-white/[0.02]' : 'bg-black/[0.015]'}`, leftPaneClassName)}>
                 <div className="max-w-md mx-auto space-y-8">
                     <div>
                         <h2 className="text-lg font-medium mb-2">Upload Documents</h2>
-                        <p className="text-sm text-white/50">
+                        <p className={`text-sm ${isDark ? 'text-white/50' : 'text-zinc-600'}`}>
                             Add PDF or TXT files to your knowledge base. They will be automatically parsed, chunked, and embedded for search.
                         </p>
                     </div>
 
                     <FileUploader onUploadComplete={handleUploadComplete} />
 
-                    <div className="p-4 rounded-lg bg-emerald-500/5 border border-emerald-500/10 text-xs text-emerald-400/80 leading-relaxed">
-                        <strong className="block mb-1 text-emerald-400">Security Note</strong>
+                    <div className={`p-4 rounded-lg border text-xs leading-relaxed ${isDark
+                        ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400/80'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}
+                    >
+                        <strong className={`block mb-1 ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>Security Note</strong>
                         All uploads are processed in EU-compliant regions (Frankfurt) and stored with row-level security.
                     </div>
                 </div>

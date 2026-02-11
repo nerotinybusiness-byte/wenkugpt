@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTheme } from 'next-themes';
 import {
     AlertCircle,
     CheckCircle,
@@ -80,6 +81,8 @@ function formatDate(dateString: string): string {
 }
 
 export default function FileList({ refreshTrigger = 0 }: FileListProps) {
+    const { resolvedTheme } = useTheme();
+    const isDark = resolvedTheme !== 'light';
     const [documents, setDocuments] = useState<DocumentItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -286,14 +289,14 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
     if (isLoading) {
         return (
             <div className="flex justify-center p-8">
-                <Loader2 className="w-6 h-6 animate-spin text-white/20" />
+                <Loader2 className={`w-6 h-6 animate-spin ${isDark ? 'text-white/20' : 'text-zinc-400'}`} />
             </div>
         );
     }
 
     if (documents.length === 0 && !searchQuery) {
         return (
-            <div className="text-center p-8 text-white/40">
+            <div className={`text-center p-8 ${isDark ? 'text-white/40' : 'text-zinc-500'}`}>
                 <p>No documents found</p>
             </div>
         );
@@ -306,7 +309,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                     <button
                         onClick={toggleSelectAll}
                         disabled={isLoading || filteredDocuments.length === 0}
-                        className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/40 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDark
+                            ? 'text-white/40 hover:text-white'
+                            : 'text-zinc-500 hover:text-zinc-800'}`}
                     >
                         {filteredDocuments.length > 0 && selectedIds.size === filteredDocuments.length ? (
                             <CheckSquare className="w-4 h-4 text-emerald-500" />
@@ -315,20 +320,25 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                         )}
                         Select All
                     </button>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-white/40">
+                    <h3 className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-white/40' : 'text-zinc-500'}`}>
                         Library ({filteredDocuments.length})
                     </h3>
                 </div>
 
                 <div className="flex items-center gap-2">
                     <div className="relative group">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/40 group-focus-within:text-white/80 transition-colors" />
+                        <Search className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 transition-colors ${isDark
+                            ? 'text-white/40 group-focus-within:text-white/80'
+                            : 'text-zinc-500 group-focus-within:text-zinc-700'}`}
+                        />
                         <input
                             type="text"
                             placeholder="Filter..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="bg-white/5 border border-white/10 rounded-md py-1 px-2 pl-8 text-sm text-white focus:outline-none focus:border-white/20 focus:bg-white/10 w-32 transition-all focus:w-48 placeholder:text-white/20 h-8"
+                            className={`rounded-md py-1 px-2 pl-8 text-sm focus:outline-none w-32 transition-all focus:w-48 h-8 ${isDark
+                                ? 'bg-white/5 border border-white/10 text-white focus:border-white/20 focus:bg-white/10 placeholder:text-white/20'
+                                : 'bg-black/[0.03] border border-black/15 text-zinc-900 focus:border-black/35 focus:bg-black/[0.05] placeholder:text-zinc-500'}`}
                         />
                     </div>
 
@@ -337,7 +347,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                             void fetchDocuments();
                         }}
                         disabled={isLoading}
-                        className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-white/40 hover:text-white disabled:opacity-50"
+                        className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${isDark
+                            ? 'hover:bg-white/10 text-white/40 hover:text-white'
+                            : 'hover:bg-black/10 text-zinc-500 hover:text-zinc-800'}`}
                         title="Refresh list"
                     >
                         <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -361,11 +373,13 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 px-2 mb-4">
-                <label className="text-[11px] uppercase tracking-wider text-white/40">Folder</label>
+                <label className={`text-[11px] uppercase tracking-wider ${isDark ? 'text-white/40' : 'text-zinc-500'}`}>Folder</label>
                 <select
                     value={folderFilter}
                     onChange={(event) => setFolderFilter(event.target.value)}
-                    className="folder-filter-select h-8 rounded-md bg-white/5 border border-white/10 px-2 text-xs text-white/90 focus:outline-none focus:border-white/20"
+                    className={`folder-filter-select h-8 rounded-md px-2 text-xs focus:outline-none ${isDark
+                        ? 'bg-white/5 border border-white/10 text-white/90 focus:border-white/20'
+                        : 'bg-black/[0.03] border border-black/15 text-zinc-900 focus:border-black/35'}`}
                 >
                     <option value="__all__">All</option>
                     <option value="__unsorted__">Unsorted</option>
@@ -382,7 +396,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                             onChange={(event) => setBulkFolderName(event.target.value)}
                             placeholder="Target folder..."
                             disabled={isUpdatingFolders}
-                            className="h-8 min-w-[180px] rounded-md bg-white/5 border border-white/10 px-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-white/20 disabled:opacity-60"
+                            className={`h-8 min-w-[180px] rounded-md border px-2 text-xs focus:outline-none disabled:opacity-60 ${isDark
+                                ? 'bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-white/20'
+                                : 'bg-black/[0.03] border-black/15 text-zinc-900 placeholder:text-zinc-500 focus:border-black/35'}`}
                         />
                         <Button
                             size="sm"
@@ -416,7 +432,7 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
 
             <div className="grid gap-2">
                 {filteredDocuments.length === 0 && searchQuery && (
-                    <div className="text-center p-8 text-white/40 border border-dashed border-white/10 rounded-lg">
+                    <div className={`text-center p-8 border border-dashed rounded-lg ${isDark ? 'text-white/40 border-white/10' : 'text-zinc-500 border-black/15'}`}>
                         <p>No documents match &quot;{searchQuery}&quot;</p>
                     </div>
                 )}
@@ -449,8 +465,10 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                         <div
                             key={doc.id}
                             className={`group flex items-center justify-between p-3 rounded-lg border transition-all ${isSelected
-                                ? 'bg-emerald-500/5 border-emerald-500/30'
-                                : 'bg-white/5 border-white/5 hover:border-white/10'}`}
+                                ? isDark ? 'bg-emerald-500/5 border-emerald-500/30' : 'bg-emerald-500/10 border-emerald-500/40'
+                                : isDark
+                                    ? 'bg-white/5 border-white/5 hover:border-white/10'
+                                    : 'bg-black/[0.03] border-black/10 hover:border-black/20'}`}
                         >
                             <div className="flex items-center gap-3 min-w-0">
                                 <div
@@ -463,7 +481,7 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                                     {isSelected ? (
                                         <CheckSquare className="w-5 h-5 text-emerald-500" />
                                     ) : (
-                                        <Square className="w-5 h-5 text-white/20 group-hover:text-white/40" />
+                                        <Square className={`w-5 h-5 ${isDark ? 'text-white/20 group-hover:text-white/40' : 'text-zinc-400 group-hover:text-zinc-600'}`} />
                                     )}
                                 </div>
 
@@ -482,10 +500,10 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                                 </div>
 
                                 <div className="min-w-0">
-                                    <p className="text-sm font-medium truncate text-white/90">
+                                    <p className={`text-sm font-medium truncate ${isDark ? 'text-white/90' : 'text-zinc-800'}`}>
                                         {toDisplayFilename(doc.filename)}
                                     </p>
-                                    <div className="flex gap-3 text-xs text-white/40">
+                                    <div className={`flex gap-3 text-xs ${isDark ? 'text-white/40' : 'text-zinc-500'}`}>
                                         <span>{formatBytes(doc.fileSize)}</span>
                                         <span>|</span>
                                         <span>{doc.pageCount} pages</span>
@@ -493,21 +511,21 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                                         <span>{formatDate(doc.createdAt)}</span>
                                     </div>
                                     {templateInfo && (
-                                        <p className="text-[11px] text-emerald-300/80 truncate">{templateInfo}</p>
+                                        <p className={`text-[11px] truncate ${isDark ? 'text-emerald-300/80' : 'text-emerald-700'}`}>{templateInfo}</p>
                                     )}
                                     {ocrInfo && (
-                                        <p className="text-[11px] text-cyan-300/80 truncate">{ocrInfo}</p>
+                                        <p className={`text-[11px] truncate ${isDark ? 'text-cyan-300/80' : 'text-cyan-700'}`}>{ocrInfo}</p>
                                     )}
                                     {ocrEngineInfo && (
-                                        <p className="text-[11px] text-cyan-300/80 truncate">{ocrEngineInfo}</p>
+                                        <p className={`text-[11px] truncate ${isDark ? 'text-cyan-300/80' : 'text-cyan-700'}`}>{ocrEngineInfo}</p>
                                     )}
                                     {folderInfo && (
-                                        <p className="text-[11px] text-sky-300/80 truncate">Folder: {folderInfo}</p>
+                                        <p className={`text-[11px] truncate ${isDark ? 'text-sky-300/80' : 'text-sky-700'}`}>Folder: {folderInfo}</p>
                                     )}
                                     {statusInfo && (
                                         <p className={`text-[11px] truncate ${doc.processingStatus === 'failed'
-                                            ? 'text-red-300/90'
-                                            : 'text-amber-300/90'}`}
+                                            ? isDark ? 'text-red-300/90' : 'text-red-600'
+                                            : isDark ? 'text-amber-300/90' : 'text-amber-700'}`}
                                         >
                                             {statusInfo}
                                         </p>
@@ -541,7 +559,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                                             void openPreview(doc);
                                         }}
                                         disabled={previewDisabled}
-                                        className="p-2 hover:bg-white/10 rounded-md transition-all text-white/40 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-white/40"
+                                        className={`p-2 rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent ${isDark
+                                            ? 'hover:bg-white/10 text-white/40 hover:text-white disabled:hover:text-white/40'
+                                            : 'hover:bg-black/10 text-zinc-500 hover:text-zinc-800 disabled:hover:text-zinc-500'}`}
                                         title={previewDisabled ? 'Preview unavailable: no extracted text' : 'Preview document'}
                                     >
                                         <Eye className="w-4 h-4" />
@@ -552,7 +572,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                                             void handleDelete([doc.id]);
                                         }}
                                         disabled={isDeleting}
-                                        className="p-2 hover:bg-white/10 rounded-md transition-all text-white/40 hover:text-red-400 disabled:opacity-50"
+                                        className={`p-2 rounded-md transition-all hover:text-red-400 disabled:opacity-50 ${isDark
+                                            ? 'hover:bg-white/10 text-white/40'
+                                            : 'hover:bg-black/10 text-zinc-500'}`}
                                         title="Delete document"
                                     >
                                         {isDeleting ? (
