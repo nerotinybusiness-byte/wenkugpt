@@ -11,9 +11,10 @@ import { getCustomSuggestionIcon } from './icons/custom/registry';
 
 interface EmptyStateProps {
     onSuggestionSelect?: (prompt: string) => void;
+    onSuggestionClick?: (suggestion: SuggestionPoolItem) => void;
 }
 
-export default function EmptyState({ onSuggestionSelect }: EmptyStateProps) {
+export default function EmptyState({ onSuggestionSelect, onSuggestionClick }: EmptyStateProps) {
     const suggestions = useMemo<SuggestionPoolItem[]>(
         () => pickRandomSuggestions(CHAT_SUGGESTION_POOL, EMPTY_STATE_SUGGESTION_COUNT),
         [],
@@ -40,7 +41,7 @@ export default function EmptyState({ onSuggestionSelect }: EmptyStateProps) {
                 </div>
 
                 <h1 className="mb-2 text-4xl font-semibold text-[var(--c-content)]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                    Liquid Glass Chat
+                    WenkuGPT
                 </h1>
                 <p className="text-center text-2xl text-[var(--c-content)]/50" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                     Start a conversation with AI
@@ -55,7 +56,10 @@ export default function EmptyState({ onSuggestionSelect }: EmptyStateProps) {
                         <button
                             key={suggestion.title}
                             type="button"
-                            onClick={() => onSuggestionSelect?.(suggestion.prompt)}
+                            onClick={() => {
+                                onSuggestionClick?.(suggestion);
+                                onSuggestionSelect?.(suggestion.prompt);
+                            }}
                             className="liquid-glass suggestion-card-pop suggestion-card-hover group relative w-full rounded-[24px] p-5 text-left transition-colors duration-200 hover:text-[var(--c-action)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-action)]/60"
                             style={{ animationDelay: `${index * 110}ms` }}
                         >

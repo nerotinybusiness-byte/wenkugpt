@@ -140,4 +140,9 @@ Fix missing `x-user-email` propagation in browser API requests.
    - commit `4154e58`
    - deployment `dpl_AdckU3FAhEZmzuJFEbEDoSMQifjU`
    - alias `https://wenkugpt-copy.vercel.app` ready.
-11. `in_progress` Final visual tuning pass by user feedback (icon detail polish + card copy curation).
+11. `done` Add liquid-glass chat-bubble favicon and deploy:
+   - commit `a2dfadf`
+   - deployment `dpl_9xtSkacA1E3YSw4pju88N54GwDiH`
+   - alias `https://wenkugpt-copy.vercel.app` ready.
+12. `in_progress` Final visual tuning pass by user feedback (icon detail polish + card copy curation).
+13. `in_progress` Empty-state hero title normalization (`Liquid Glass Chat` -> `WenkuGPT`) is implemented locally and awaiting commit/push/deploy.

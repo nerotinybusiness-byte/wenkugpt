@@ -15,7 +15,10 @@ import { FileText, MessageSquarePlus, History, Trash2 } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import EmptyState from './EmptyState';
+import BejroskaShowcase from './BejroskaShowcase';
+import SpotlightConfetti from './SpotlightConfetti';
 import type { CitationPayload } from './CitationLink';
+import type { SuggestionPoolItem } from './suggestionPool';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import { SettingsDialog } from './SettingsDialog';
 import { ManageFilesDialog } from './ManageFilesDialog';
@@ -140,6 +143,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
     const [initialPage, setInitialPage] = useState<number>(1);
     const [highlights, setHighlights] = useState<Array<{ page: number; bbox: NonNullable<Source['boundingBox']> }>>([]);
     const [highlightContext, setHighlightContext] = useState<string>('');
+    const [isBejroskaOpen, setIsBejroskaOpen] = useState(false);
 
     const normalizeDisplayFilename = (name: string): string => {
         const basename = name.split(/[/\\]/).pop() || name;
@@ -457,6 +461,12 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
         setIsLoading(true);
     }, [isLoading, chatId, submitQuery]);
 
+    const handleSuggestionClick = useCallback((suggestion: SuggestionPoolItem) => {
+        if (suggestion.easterEggId === 'bejroska') {
+            setIsBejroskaOpen(true);
+        }
+    }, []);
+
     return (
         <div className="flex h-screen w-full overflow-hidden transition-colors duration-400">
             {/* Main Content */}
@@ -590,7 +600,10 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                         aria-relevant="additions"
                     >
                         {messages.length === 0 ? (
-                            <EmptyState onSuggestionSelect={handleSendMessage} />
+                            <EmptyState
+                                onSuggestionSelect={handleSendMessage}
+                                onSuggestionClick={handleSuggestionClick}
+                            />
                         ) : (
                             messages.map((message) => (
                                 <ChatMessage
@@ -649,6 +662,17 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                 highlights={highlights}
                 highlightContext={highlightContext}
             />
+
+            <SpotlightConfetti
+                open={isBejroskaOpen}
+                onClose={() => setIsBejroskaOpen(false)}
+                title="Bejroska activated!"
+                subtitle="Wenku hoodie showcase"
+                durationMs={3000}
+                holeRadius={140}
+            >
+                <BejroskaShowcase />
+            </SpotlightConfetti>
         </div>
     );
 }

@@ -5,6 +5,7 @@ export interface SuggestionPoolItem {
     title: string;
     subtitle: string;
     prompt: string;
+    easterEggId?: 'bejroska';
 }
 
 export const EMPTY_STATE_SUGGESTION_COUNT = 4;
@@ -112,6 +113,13 @@ export const CHAT_SUGGESTION_POOL: SuggestionPoolItem[] = [
         title: 'Obcerstveni - pivo',
         subtitle: 'Plan zasob a doplnovani',
         prompt: 'Navrhni plan zasob a doplnovani piva pro event.',
+    },
+    {
+        icon: 'apparel_hoodie_w',
+        title: 'Bejroska?',
+        subtitle: 'Spustit tajny spotlight rezim',
+        prompt: 'Co je to Bejroska?',
+        easterEggId: 'bejroska',
     },
 ];
 

@@ -2,7 +2,7 @@
 
 Last Updated: 2026-02-11
 Incident Scope: Upload failures in Knowledge Base UI (`DOMMatrix is not defined`) and API auth failures (`Missing identity header. Set x-user-email.`)
-Status: Core ingest incident resolved in production; active follow-up moved to chat empty-state UX polish (suggestions, motion, custom icon system V2) with latest deploy live on alias.
+Status: Core ingest incident resolved in production; active follow-up moved to chat empty-state UX polish (suggestions, motion, custom icon system V2) plus branding polish (`WenkuGPT` hero title / favicon consistency).
 
 ## Maintenance policy
 This folder is a living runbook.
@@ -47,11 +47,14 @@ The objective is zero context loss across chat windows.
   - premium motion tuning,
   - custom inline SVG icon system (V1 -> V2 refresh),
   - rope icon removal from V2 set.
+- New focus (2026-02-11, latest): branding consistency in chat hero:
+  - liquid-glass chat-bubble favicon added,
+  - empty-state hero title normalized to `WenkuGPT` (local patch pending deploy).
 - Latest production deploy:
-  - deployment id `dpl_AdckU3FAhEZmzuJFEbEDoSMQifjU`
-  - URL `https://wenkugpt-copy-60kj3ouzk-nerotinys-projects.vercel.app`
+  - deployment id `dpl_9xtSkacA1E3YSw4pju88N54GwDiH`
+  - URL `https://wenkugpt-copy-diwcxv4fg-nerotinys-projects.vercel.app`
   - alias `https://wenkugpt-copy.vercel.app`
 
 ## Immediate next action
-Run final visual QA pass on aliased production for empty-state cards (icon consistency, hover/motion feel, dark/light parity), then continue telemetry monitoring for OCR rescue in parallel.
+Commit/push/deploy latest empty-state hero title change (`Liquid Glass Chat` -> `WenkuGPT`), then run final visual QA pass on alias (icon consistency, hover/motion feel, dark/light parity).
 

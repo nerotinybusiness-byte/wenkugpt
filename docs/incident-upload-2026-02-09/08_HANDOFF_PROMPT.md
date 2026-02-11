@@ -34,11 +34,13 @@ Current implementation status (latest):
    - removed from `types.ts` and `registry.tsx`
    - pool item remapped in `suggestionPool.ts`
 5. Latest production deployment:
-   - deployment id `dpl_AdckU3FAhEZmzuJFEbEDoSMQifjU`
-   - URL `https://wenkugpt-copy-60kj3ouzk-nerotinys-projects.vercel.app`
+   - deployment id `dpl_9xtSkacA1E3YSw4pju88N54GwDiH`
+   - URL `https://wenkugpt-copy-diwcxv4fg-nerotinys-projects.vercel.app`
    - alias `https://wenkugpt-copy.vercel.app`
 6. Latest branch commit:
-   - `4154e58` (`fix(chat): remove rope icon from suggestion icon set`)
+   - `a2dfadf` (`feat(ui): add liquid-glass chat bubble favicon`)
+7. Local working-tree delta (not yet committed/deployed):
+   - `src/components/chat/EmptyState.tsx`: hero title changed from `Liquid Glass Chat` to `WenkuGPT`.
 
 Immediate objective:
 1. Visual QA pass on alias for empty-state cards:
@@ -47,6 +49,7 @@ Immediate objective:
    - hover/motion smoothness
 2. Tune suggestion/icon mapping only if user requests style/content changes.
 3. Keep OCR runtime telemetry monitoring in parallel (no policy changes unless requested).
+4. If branding rename is approved, commit/push/deploy the local `WenkuGPT` hero title patch and update logs.
 
 Constraints:
 1. Do not weaken production auth requirement.
@@ -86,5 +89,8 @@ Empty-state UX update (2026-02-11, latest):
 3. Custom inline SVG icon system introduced (`src/components/chat/icons/custom/*`) and then refreshed to V2.
 4. Rope icon removed from V2 set and from active type registry.
 5. Latest deploy carrying this state:
-   - `https://wenkugpt-copy-60kj3ouzk-nerotinys-projects.vercel.app`
+   - `https://wenkugpt-copy-diwcxv4fg-nerotinys-projects.vercel.app`
    - alias `https://wenkugpt-copy.vercel.app` ready.
+6. Branding parity update:
+   - favicon switched to liquid-glass chat bubble (`public/favicon.svg`, metadata in `src/app/layout.tsx`).
+   - hero title text normalization to `WenkuGPT` is currently local and pending deployment.

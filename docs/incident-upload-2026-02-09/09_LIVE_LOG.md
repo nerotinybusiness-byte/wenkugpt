@@ -294,3 +294,22 @@ Use this file as append-only progress log.
   - URL: `https://wenkugpt-copy-60kj3ouzk-nerotinys-projects.vercel.app`
   - alias: `https://wenkugpt-copy.vercel.app` (`Ready`).
 - Current status: production includes OCR hardening + folder UX + conversational suggestions + custom icon V2 baseline; pending only visual fine-tuning per user feedback.
+
+- Branding consistency update:
+  - added liquid-glass chat-bubble favicon:
+    - `public/favicon.svg`
+    - `src/app/layout.tsx` (`metadata.icons` wired to `/favicon.svg`).
+  - validation:
+    - `npm run lint` passed.
+    - `npx tsc --noEmit --incremental false` passed.
+  - commits:
+    - `00beb08` (`docs(incident): sync handoff docs after chat icon V2 rollout`)
+    - `a2dfadf` (`feat(ui): add liquid-glass chat bubble favicon`)
+  - production deployment:
+    - deployment id `dpl_9xtSkacA1E3YSw4pju88N54GwDiH`
+    - URL `https://wenkugpt-copy-diwcxv4fg-nerotinys-projects.vercel.app`
+    - alias `https://wenkugpt-copy.vercel.app` updated and ready.
+- Latest local UI copy adjustment (pending commit/deploy):
+  - file: `src/components/chat/EmptyState.tsx`
+  - change: hero heading text `Liquid Glass Chat` -> `WenkuGPT`.
+  - current status: implemented locally, awaiting push/deploy step.

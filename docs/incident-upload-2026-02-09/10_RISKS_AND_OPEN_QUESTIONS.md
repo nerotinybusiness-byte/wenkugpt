@@ -64,6 +64,11 @@
 - Mitigation: keep all suggestions centralized in `src/components/chat/suggestionPool.ts`, curate pool after each feedback round, keep only approved icon IDs.
 - Status: in progress.
 
+14. Local-vs-deployed UI copy drift (opened 2026-02-11)
+- Risk: handoff confusion when hero copy change is present locally but not yet deployed (example: `Liquid Glass Chat` -> `WenkuGPT`).
+- Mitigation: always log local pending deltas explicitly in handoff prompt/live log and complete commit+deploy before closure.
+- Status: in progress.
+
 ## Open questions requiring decision
 1. What is canonical client-side identity source?
 - Option A: `NEXT_PUBLIC_DEFAULT_USER_EMAIL` (simple, static)
@@ -96,6 +101,9 @@
 
 10. Should we lock a final V2 icon subset now (freeze taxonomy for a week) before additional style edits?
 - Proposed default: yes, freeze after current V2 + rope removal deploy, then batch only curated additions.
+
+11. Should branding text in empty-state hero be permanently locked to `WenkuGPT`?
+- Proposed default: yes, lock to `WenkuGPT` and avoid marketing-title experiments unless explicitly requested.
 
 ## Exit criteria for incident closure
 - Header propagation fixed and verified in browser.

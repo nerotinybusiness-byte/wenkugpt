@@ -28,3 +28,6 @@ Purpose: compact record of user requests and responses that influence implementa
 - User provided reference list and locked V2 icon taxonomy (sport/apparel/wenku/casual) with removals of old icons.
 - User requested final cleanup to remove rope icon from active V2 icon set and ensure latest state is deployed.
 - User requested complete markdown handoff so next context window can continue without rediscovery.
+- User requested a favicon derived from the liquid-glass chat-bubble icon; favicon deployment completed.
+- User requested hero text rename from `Liquid Glass Chat` to `WenkuGPT`; local patch applied.
+- User requested another full markdown sync so continuation in a new context window has no gaps.
