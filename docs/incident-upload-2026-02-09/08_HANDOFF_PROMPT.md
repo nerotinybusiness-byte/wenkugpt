@@ -3,41 +3,55 @@
 Use this exact brief to continue without re-discovery:
 
 ---
-Continue incident resolution for upload/chat failures.
+Continue from latest production state of the upload/chat hardening + empty-state UX track.
 
 Context:
-- Incident folder: `docs/incident-upload-2026-02-09/`
-- Read in order: `01_EXEC_SUMMARY.md`, `04_ROOT_CAUSE.md`, `06_REMEDIATION_PLAN.md`, `07_VALIDATION_CHECKLIST.md`.
-- OCR engine switch track added (2026-02-11): user-level `gemini`/`tesseract` selection for empty/low chunk OCR rescue.
-- Root cause is confirmed: frontend `/api/*` fetch calls do not send required `x-user-email` header.
-- Production backend works when header is present.
-- `src/lib/ingest/parser.ts` already has local changes for pdf worker handling; keep them unless disproven.
+1. Incident folder: `docs/incident-upload-2026-02-09/`
+2. Read in order:
+   - `01_EXEC_SUMMARY.md`
+   - `04_ROOT_CAUSE.md`
+   - `06_REMEDIATION_PLAN.md`
+   - `14_IMPLEMENTATION_TRACKER.md`
+   - `09_LIVE_LOG.md`
+3. Core incident is already stabilized in production:
+   - auth header propagation fixed,
+   - schema drift fixed (migrations `0005`, `0006`, `0007`),
+   - zero-chunk scan hardening shipped,
+   - OCR engine switch (`gemini`/`tesseract`) shipped (warning-only policy retained).
 
-Current implementation status:
-1. Shared browser helper implemented: `src/lib/api/client-request.ts`.
-2. Migrations complete in:
-   - `src/components/ingest/FileUploader.tsx`
-   - `src/components/ingest/FileList.tsx`
-   - `src/components/chat/ChatPanel.tsx`
-3. Local checks passed:
-   - `npx tsc --noEmit --incremental false`
-   - `npm run test:run`
-   - `npm run build`
-4. Latest production deploy:
-   - `https://wenkugpt-copy-jh17adf7h-nerotinys-projects.vercel.app`
+Current implementation status (latest):
+1. Empty-state suggestion system is live:
+   - clickable suggestion cards in `src/components/chat/EmptyState.tsx`
+   - random pool in `src/components/chat/suggestionPool.ts`
+2. Motion/hover polish is live:
+   - staggered entrance animation + refined timing in `src/app/globals.css`
+3. Custom icon system is live:
+   - registry in `src/components/chat/icons/custom/registry.tsx`
+   - icon IDs in `src/components/chat/icons/custom/types.ts`
+   - V2 icon refresh deployed (sport/apparel/lifestyle + generic/context/brand)
+4. Rope icon was removed from active icon set:
+   - deleted file `src/components/chat/icons/custom/IconSportRope.tsx`
+   - removed from `types.ts` and `registry.tsx`
+   - pool item remapped in `suggestionPool.ts`
+5. Latest production deployment:
+   - deployment id `dpl_AdckU3FAhEZmzuJFEbEDoSMQifjU`
+   - URL `https://wenkugpt-copy-60kj3ouzk-nerotinys-projects.vercel.app`
    - alias `https://wenkugpt-copy.vercel.app`
-5. API smoke checks passed; browser UX verification remains.
+6. Latest branch commit:
+   - `4154e58` (`fix(chat): remove rope icon from suggestion icon set`)
 
 Immediate objective:
-1. Apply DB migration `drizzle/0007_ocr_engine_switch.sql` on target environment.
-2. Verify ingest behavior for both OCR engine settings (`gemini`, `tesseract`) with warning-only failure semantics.
-3. Run and record full gates: `npx tsc --noEmit --incremental false`, `npm run lint`, `npm run test:run`, `npm run build`.
-4. Update `07_VALIDATION_CHECKLIST.md`, `14_IMPLEMENTATION_TRACKER.md`, and closure note in `09_LIVE_LOG.md`.
+1. Visual QA pass on alias for empty-state cards:
+   - dark/light contrast
+   - icon clarity at 1x/2x DPI
+   - hover/motion smoothness
+2. Tune suggestion/icon mapping only if user requests style/content changes.
+3. Keep OCR runtime telemetry monitoring in parallel (no policy changes unless requested).
 
 Constraints:
-- Do not weaken production auth requirement.
-- Keep docs current after each material change.
-- Include exact file references and verification outputs in summaries.
+1. Do not weaken production auth requirement.
+2. Keep OCR rescue warning-only behavior.
+3. Keep docs append-only and update `09/10/14/15` after each material UI change.
 ---
 
 
@@ -65,3 +79,12 @@ Zero-chunk scan hardening update (2026-02-11):
    - commit `6f035cb`
    - `https://wenkugpt-copy-agizq24wt-nerotinys-projects.vercel.app`
    - alias `https://wenkugpt-copy.vercel.app` updated.
+
+Empty-state UX update (2026-02-11, latest):
+1. Conversational suggestions were added and iterated to liquid-glass visual parity.
+2. Suggestion pool now renders 4 random cards from editable pool.
+3. Custom inline SVG icon system introduced (`src/components/chat/icons/custom/*`) and then refreshed to V2.
+4. Rope icon removed from V2 set and from active type registry.
+5. Latest deploy carrying this state:
+   - `https://wenkugpt-copy-60kj3ouzk-nerotinys-projects.vercel.app`
+   - alias `https://wenkugpt-copy.vercel.app` ready.

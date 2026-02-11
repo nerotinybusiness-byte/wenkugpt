@@ -54,6 +54,16 @@
 - Mitigation: user-level opt-in engine switch, hard page cap for Tesseract rescue (`6` pages), warning-only behavior on provider failure (`ocr_rescue_tesseract_unavailable`, `ocr_rescue_timeout`), telemetry by engine.
 - Status: in progress.
 
+12. Empty-state custom icon consistency drift (opened 2026-02-11)
+- Risk: rapid iteration on custom SVG set may create style mismatch (stroke density/optical center) or broken registry references when IDs change.
+- Mitigation: keep single typed taxonomy (`CustomSuggestionIconId`), run lint/tsc on every icon-set edit, verify dark/light rendering on aliased production before closure.
+- Status: in progress.
+
+13. Suggestion pool topical drift (opened 2026-02-11)
+- Risk: randomized pool can surface cards that feel off-topic for current customer context if prompt set is not curated.
+- Mitigation: keep all suggestions centralized in `src/components/chat/suggestionPool.ts`, curate pool after each feedback round, keep only approved icon IDs.
+- Status: in progress.
+
 ## Open questions requiring decision
 1. What is canonical client-side identity source?
 - Option A: `NEXT_PUBLIC_DEFAULT_USER_EMAIL` (simple, static)
@@ -83,6 +93,9 @@
 
 9. Should `OCR_TESSERACT_ENABLED` stay enabled in all preview environments?
 - Proposed default: keep `true` where tested, disable selectively (`false`) in unstable/low-CPU previews while preserving warning-only upload behavior.
+
+10. Should we lock a final V2 icon subset now (freeze taxonomy for a week) before additional style edits?
+- Proposed default: yes, freeze after current V2 + rope removal deploy, then batch only curated additions.
 
 ## Exit criteria for incident closure
 - Header propagation fixed and verified in browser.

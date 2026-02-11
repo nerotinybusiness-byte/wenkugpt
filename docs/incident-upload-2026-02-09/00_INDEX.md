@@ -2,7 +2,7 @@
 
 Last Updated: 2026-02-11
 Incident Scope: Upload failures in Knowledge Base UI (`DOMMatrix is not defined`) and API auth failures (`Missing identity header. Set x-user-email.`)
-Status: Production schema drift resolved and OCR engine switch rollout completed; residual browser validation and telemetry monitoring remain.
+Status: Core ingest incident resolved in production; active follow-up moved to chat empty-state UX polish (suggestions, motion, custom icon system V2) with latest deploy live on alias.
 
 ## Maintenance policy
 This folder is a living runbook.
@@ -41,7 +41,17 @@ The objective is zero context loss across chat windows.
 - User-visible outcome: uploads and chat can fail even when backend endpoints are healthy.
 - New focus (2026-02-10): page-wide PDF citation highlight caused by coarse chunk bbox/matching behavior.
 - New focus (2026-02-11): OCR rescue engine switch (`gemini`/`tesseract`) with user-level setting, no-fallback policy, and warning-only behavior.
+- New focus (2026-02-11, later): chat empty-state UX iteration:
+  - conversational suggestions,
+  - random suggestion pool,
+  - premium motion tuning,
+  - custom inline SVG icon system (V1 -> V2 refresh),
+  - rope icon removal from V2 set.
+- Latest production deploy:
+  - deployment id `dpl_AdckU3FAhEZmzuJFEbEDoSMQifjU`
+  - URL `https://wenkugpt-copy-60kj3ouzk-nerotinys-projects.vercel.app`
+  - alias `https://wenkugpt-copy.vercel.app`
 
 ## Immediate next action
-Run final browser UX regression pass on aliased production (upload/chat/citation click), then continue monitoring OCR warning and latency telemetry after migration rollout.
+Run final visual QA pass on aliased production for empty-state cards (icon consistency, hover/motion feel, dark/light parity), then continue telemetry monitoring for OCR rescue in parallel.
 

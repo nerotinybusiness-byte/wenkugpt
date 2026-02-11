@@ -265,3 +265,32 @@ Use this file as append-only progress log.
   - production deployment: `https://wenkugpt-copy-agizq24wt-nerotinys-projects.vercel.app`.
   - alias `https://wenkugpt-copy.vercel.app` points to this deployment.
 - Current status: zero-chunk scan hardening is deployed to production; monitor runtime behavior on real scan uploads.
+
+- Added Knowledge Base document organization UX (flat folders):
+  - upload folder field, folder filter, bulk move/clear.
+  - branch commit: `2bd3e1f`.
+- Deployed UI reliability fixes around file manager:
+  - preview close actions restored.
+  - scrollbar usability and scrolling behavior fixed.
+  - light mode contrast corrections in KB dialog/list.
+- OCR Gemini quality tuning shipped:
+  - timeout increased to 60s.
+  - one retry on timeout/parse/empty output.
+  - Czech prompt hardening (diacritics + exact phone extraction guidance).
+  - branch commit: `988d0c9`.
+- Chat empty-state conversational suggestions track shipped in phases:
+  - suggestion cards added and wired to send flow.
+  - liquid-glass hero/style restoration.
+  - random suggestion pool (`4` cards each render).
+  - staged motion polish (staggered entrance + ultra-subtle timing + hover polish).
+- Custom icon system for suggestions shipped:
+  - V1: inline SVG registry and typed icon IDs.
+  - V2 refresh: sport/apparel/lifestyle set expansion and style normalization.
+  - removed old icons (`helmet`, `paddle`) during V2 refresh.
+  - rope icon removed in follow-up (`fix(chat): remove rope icon from suggestion icon set`).
+  - latest commit: `4154e58`.
+- Latest production deployment after V2 + rope removal:
+  - deployment id: `dpl_AdckU3FAhEZmzuJFEbEDoSMQifjU`
+  - URL: `https://wenkugpt-copy-60kj3ouzk-nerotinys-projects.vercel.app`
+  - alias: `https://wenkugpt-copy.vercel.app` (`Ready`).
+- Current status: production includes OCR hardening + folder UX + conversational suggestions + custom icon V2 baseline; pending only visual fine-tuning per user feedback.

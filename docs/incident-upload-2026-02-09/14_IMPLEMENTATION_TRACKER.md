@@ -125,3 +125,19 @@ Fix missing `x-user-email` propagation in browser API requests.
 8. `done` Add tests: OCR rescue fallback + preview route behavior (`failed+empty`, `exists+chunks`, `missing`).
 9. `done` Run full gates (`tsc`, `lint`, `test:run`, `build`).
 10. `done` Commit, push, and deploy current hardening patch (`6f035cb`, `https://wenkugpt-copy-agizq24wt-nerotinys-projects.vercel.app`, alias updated).
+
+## Chat empty-state UX and icon system track (2026-02-11)
+1. `done` Add conversational suggestion cards in empty state and wire click-to-send flow.
+2. `done` Restore liquid-glass hero composition while keeping suggestion functionality.
+3. `done` Add random suggestion pool behavior (`4` cards per render) via `suggestionPool.ts`.
+4. `done` Add staged card motion (staggered entrance) and refine to ultra-subtle timing profile.
+5. `done` Add premium hover effects for icon bubble + card surface.
+6. `done` Introduce custom inline SVG icon registry and typed icon IDs (V1).
+7. `done` Refresh icon set to V2 taxonomy (sport/apparel/lifestyle/context/brand/generic).
+8. `done` Remove deprecated icons from V2 refresh (`helmet`, `paddle`).
+9. `done` Remove rope icon from active set and remap usage in suggestion pool.
+10. `done` Validate and deploy latest state:
+   - commit `4154e58`
+   - deployment `dpl_AdckU3FAhEZmzuJFEbEDoSMQifjU`
+   - alias `https://wenkugpt-copy.vercel.app` ready.
+11. `in_progress` Final visual tuning pass by user feedback (icon detail polish + card copy curation).
