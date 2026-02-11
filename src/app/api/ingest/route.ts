@@ -27,6 +27,7 @@ const IngestRequestSchema = z.object({
     templateProfileId: z.string().trim().min(1).max(128).optional(),
     emptyChunkOcrEnabled: z.boolean().optional(),
     emptyChunkOcrEngine: z.any().optional(),
+    folderName: z.string().optional(),
 });
 
 function sanitizeFilename(name: string): string {
@@ -50,7 +51,15 @@ export function parseIngestOptions(formData: FormData): {
     templateProfileId?: string;
     emptyChunkOcrEnabled?: boolean;
     emptyChunkOcrEngine: OcrEngine;
+    folderName?: string;
 } {
+    const sanitizeFolderName = (value: unknown): string | undefined => {
+        if (typeof value !== 'string') return undefined;
+        const trimmed = value.trim();
+        if (trimmed.length === 0 || trimmed.length > 128) return undefined;
+        return trimmed;
+    };
+
     const optionsRaw = formData.get('options');
 
     if (typeof optionsRaw === 'string') {
@@ -61,6 +70,7 @@ export function parseIngestOptions(formData: FormData): {
                 return {
                     ...validated.data,
                     emptyChunkOcrEngine: resolveOcrEngine(validated.data.emptyChunkOcrEngine),
+                    folderName: sanitizeFolderName(validated.data.folderName),
                 };
             }
         } catch {
@@ -72,17 +82,20 @@ export function parseIngestOptions(formData: FormData): {
     const legacyAccess = formData.get('accessLevel');
     const legacySkip = formData.get('skipEmbedding');
     const legacyOcrEngine = formData.get('emptyChunkOcrEngine');
+    const legacyFolderName = formData.get('folderName');
 
     const validated = IngestRequestSchema.safeParse({
         accessLevel: typeof legacyAccess === 'string' ? legacyAccess : undefined,
         skipEmbedding: typeof legacySkip === 'string' ? legacySkip === 'true' : undefined,
         emptyChunkOcrEngine: typeof legacyOcrEngine === 'string' ? legacyOcrEngine : undefined,
+        folderName: typeof legacyFolderName === 'string' ? legacyFolderName : undefined,
     });
 
     if (validated.success) {
         return {
             ...validated.data,
             emptyChunkOcrEngine: resolveOcrEngine(validated.data.emptyChunkOcrEngine),
+            folderName: sanitizeFolderName(validated.data.folderName),
         };
     }
 
@@ -195,6 +208,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             templateProfileId: options.templateProfileId,
             emptyChunkOcrEnabled: options.emptyChunkOcrEnabled,
             emptyChunkOcrEngine: options.emptyChunkOcrEngine,
+            folderName: options.folderName,
         });
 
         return apiSuccess({
@@ -248,7 +262,7 @@ export async function GET(): Promise<NextResponse> {
                 body: 'multipart/form-data',
                 fields: {
                     file: 'PDF or TXT file (required)',
-                    options: 'JSON string with { accessLevel?: "public"|"private"|"team", skipEmbedding?: boolean, templateProfileId?: string, emptyChunkOcrEnabled?: boolean, emptyChunkOcrEngine?: "gemini"|"tesseract" }',
+                    options: 'JSON string with { accessLevel?: "public"|"private"|"team", skipEmbedding?: boolean, templateProfileId?: string, emptyChunkOcrEnabled?: boolean, emptyChunkOcrEngine?: "gemini"|"tesseract", folderName?: string }',
                 },
             },
         },

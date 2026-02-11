@@ -25,6 +25,7 @@ interface DocumentItem {
     pageCount: number;
     processingStatus: 'completed' | 'processing' | 'failed';
     processingError?: string | null;
+    folderName?: string | null;
     templateProfileId?: string | null;
     templateMatched?: boolean;
     templateMatchScore?: number | null;
@@ -84,6 +85,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
     const [searchQuery, setSearchQuery] = useState('');
+    const [folderFilter, setFolderFilter] = useState('__all__');
+    const [bulkFolderName, setBulkFolderName] = useState('');
+    const [isUpdatingFolders, setIsUpdatingFolders] = useState(false);
 
     const [previewDoc, setPreviewDoc] = useState<{ id: string; filename: string } | null>(null);
     const [previewContent, setPreviewContent] = useState('');
@@ -129,10 +133,26 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
         return undefined;
     }, [documents]);
 
+    const folderOptions = Array.from(
+        new Set(
+            documents
+                .map((doc) => doc.folderName?.trim() || '')
+                .filter((folderName) => folderName.length > 0),
+        ),
+    ).sort((a, b) => a.localeCompare(b, 'cs'));
+
     const filteredDocuments = documents.filter((doc) => {
         const normalizedQuery = searchQuery.toLowerCase();
         const displayFilename = toDisplayFilename(doc.filename).toLowerCase();
         const rawFilename = doc.filename.toLowerCase();
+        const folderName = doc.folderName?.trim() || '';
+        const folderMatch = folderFilter === '__all__'
+            ? true
+            : folderFilter === '__unsorted__'
+                ? folderName.length === 0
+                : folderName === folderFilter;
+
+        if (!folderMatch) return false;
         return displayFilename.includes(normalizedQuery) || rawFilename.includes(normalizedQuery);
     });
 
@@ -189,6 +209,50 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                 ids.forEach((id) => next.delete(id));
                 return next;
             });
+        }
+    };
+
+    const handleBulkFolderUpdate = async (nextFolderName: string | null) => {
+        const ids = Array.from(selectedIds);
+        if (ids.length === 0 || isUpdatingFolders) return;
+
+        setIsUpdatingFolders(true);
+        try {
+            const updates = await Promise.all(
+                ids.map(async (id) => {
+                    const response = await apiFetch(`/api/documents/${id}`, {
+                        method: 'PATCH',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify({ folderName: nextFolderName }),
+                    });
+                    const payload = await response.json() as ApiResponse<{ id: string; folderName: string | null }>;
+                    return {
+                        id,
+                        ok: payload.success,
+                        folderName: payload.success ? payload.data.folderName : null,
+                    };
+                }),
+            );
+
+            const failed = updates.filter((row) => !row.ok);
+            const succeeded = updates.filter((row) => row.ok);
+            if (failed.length > 0) {
+                alert(`Failed to update folder for ${failed.length} document(s).`);
+            }
+
+            if (succeeded.length > 0) {
+                const nextById = new Map(succeeded.map((row) => [row.id, row.folderName]));
+                setDocuments((prev) => prev.map((doc) => (
+                    nextById.has(doc.id)
+                        ? { ...doc, folderName: nextById.get(doc.id) ?? null }
+                        : doc
+                )));
+            }
+        } catch (error) {
+            console.error('Error updating folders:', error);
+            alert('Error updating selected document folders');
+        } finally {
+            setIsUpdatingFolders(false);
         }
     };
 
@@ -287,12 +351,67 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                                 void handleDelete(Array.from(selectedIds));
                             }}
                             className="h-8 text-xs bg-red-500/10 text-red-400 hover:bg-red-500/20 border-red-500/20 ml-2"
+                            disabled={isUpdatingFolders}
                         >
                             <Trash2 className="w-3 h-3 mr-1.5" />
                             Delete ({selectedIds.size})
                         </Button>
                     )}
                 </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 px-2 mb-4">
+                <label className="text-[11px] uppercase tracking-wider text-white/40">Folder</label>
+                <select
+                    value={folderFilter}
+                    onChange={(event) => setFolderFilter(event.target.value)}
+                    className="h-8 rounded-md bg-white/5 border border-white/10 px-2 text-xs text-white/80 focus:outline-none focus:border-white/20"
+                >
+                    <option value="__all__">All</option>
+                    <option value="__unsorted__">Unsorted</option>
+                    {folderOptions.map((folder) => (
+                        <option key={folder} value={folder}>{folder}</option>
+                    ))}
+                </select>
+
+                {selectedIds.size > 0 && (
+                    <>
+                        <input
+                            type="text"
+                            value={bulkFolderName}
+                            onChange={(event) => setBulkFolderName(event.target.value)}
+                            placeholder="Target folder..."
+                            disabled={isUpdatingFolders}
+                            className="h-8 min-w-[180px] rounded-md bg-white/5 border border-white/10 px-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-white/20 disabled:opacity-60"
+                        />
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={isUpdatingFolders || bulkFolderName.trim().length === 0}
+                            className="h-8 text-xs"
+                            onClick={() => {
+                                void handleBulkFolderUpdate(bulkFolderName.trim());
+                            }}
+                        >
+                            {isUpdatingFolders ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                                'Move'
+                            )}
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={isUpdatingFolders}
+                            className="h-8 text-xs"
+                            onClick={() => {
+                                void handleBulkFolderUpdate(null);
+                            }}
+                        >
+                            Clear
+                        </Button>
+                    </>
+                )}
             </div>
 
             <div className="grid gap-2">
@@ -321,6 +440,7 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                     const ocrWarningInfo = Array.isArray(doc.ocrRescueWarnings) && doc.ocrRescueWarnings.length > 0
                         ? `OCR warnings: ${doc.ocrRescueWarnings.join(', ')}`
                         : null;
+                    const folderInfo = doc.folderName?.trim() || null;
                     const statusInfo = doc.processingStatus === 'failed' && doc.processingError
                         ? doc.processingError
                         : warningInfo || ocrWarningInfo;
@@ -380,6 +500,9 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                                     )}
                                     {ocrEngineInfo && (
                                         <p className="text-[11px] text-cyan-300/80 truncate">{ocrEngineInfo}</p>
+                                    )}
+                                    {folderInfo && (
+                                        <p className="text-[11px] text-sky-300/80 truncate">Folder: {folderInfo}</p>
                                     )}
                                     {statusInfo && (
                                         <p className={`text-[11px] truncate ${doc.processingStatus === 'failed'

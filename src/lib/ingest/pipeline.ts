@@ -222,6 +222,7 @@ export async function processPipeline(
         templateProfileId?: string;
         emptyChunkOcrEnabled?: boolean;
         emptyChunkOcrEngine?: OcrEngine;
+        folderName?: string;
     } = {},
 ): Promise<PipelineResult> {
     const startTime = performance.now();
@@ -464,6 +465,7 @@ export async function processPipeline(
                     fileSize: buffer.length,
                     pageCount: document.pageCount,
                     accessLevel,
+                    folderName: options.folderName ?? null,
                     processingStatus: 'processing',
                     templateProfileId: templateResult.diagnostics.profileId,
                     templateMatched: templateResult.diagnostics.matched,
@@ -549,6 +551,7 @@ export async function processPipeline(
                         ocrRescueWarnings: ocrRescue.warnings.length > 0
                             ? ocrRescue.warnings
                             : null,
+                        folderName: doc.folderName,
                         updatedAt: new Date(),
                     })
                     .where(eq(documents.id, doc.id));

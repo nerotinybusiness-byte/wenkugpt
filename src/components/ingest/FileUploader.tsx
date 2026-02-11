@@ -91,6 +91,7 @@ function isAllowedFile(file: File): boolean {
 export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
     const [isDragging, setIsDragging] = useState(false);
     const [files, setFiles] = useState<FileWithStatus[]>([]);
+    const [folderName, setFolderName] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const addFiles = useCallback((newFiles: File[]) => {
@@ -160,11 +161,13 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
         const formData = new FormData();
         formData.append('file', fileWrapper.file);
         const settings = getSettings();
+        const normalizedFolderName = folderName.trim();
         formData.append('options', JSON.stringify({
             accessLevel: 'private',
             skipEmbedding: false,
             emptyChunkOcrEnabled: settings.emptyChunkOcrEnabled,
             emptyChunkOcrEngine: settings.emptyChunkOcrEngine,
+            folderName: normalizedFolderName.length > 0 ? normalizedFolderName : undefined,
         }));
 
         try {
@@ -292,6 +295,23 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                     <h3 className="text-base font-medium">Drop PDF/TXT files here</h3>
                     <p className="text-xs text-white/40 mt-1 uppercase tracking-wider">Max 50MB - Multiple Files</p>
                 </div>
+            </div>
+
+            <div className="space-y-1">
+                <label className="text-xs font-semibold uppercase tracking-wider text-white/50">
+                    Folder (optional)
+                </label>
+                <input
+                    type="text"
+                    value={folderName}
+                    onChange={(e) => setFolderName(e.target.value)}
+                    placeholder="e.g. Kontakty, Faktury 2026..."
+                    disabled={isUploading}
+                    className="w-full h-9 rounded-md bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-white/25 disabled:opacity-60"
+                />
+                <p className="text-[11px] text-white/40">
+                    Type a new name to create a folder on first upload.
+                </p>
             </div>
 
             {files.length > 0 && (

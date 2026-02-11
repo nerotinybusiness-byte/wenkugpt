@@ -58,4 +58,37 @@ describe('parseIngestOptions', () => {
         const parsed = parseIngestOptions(formData);
         expect(parsed.emptyChunkOcrEngine).toBe('gemini');
     });
+
+    it('parses and trims folderName from JSON options', async () => {
+        const parseIngestOptions = await loadParseIngestOptions();
+        const formData = new FormData();
+        formData.append('options', JSON.stringify({
+            folderName: '  Finance 2026  ',
+        }));
+
+        const parsed = parseIngestOptions(formData);
+        expect(parsed.folderName).toBe('Finance 2026');
+    });
+
+    it('sanitizes empty folderName to undefined', async () => {
+        const parseIngestOptions = await loadParseIngestOptions();
+        const formData = new FormData();
+        formData.append('options', JSON.stringify({
+            folderName: '   ',
+        }));
+
+        const parsed = parseIngestOptions(formData);
+        expect(parsed.folderName).toBeUndefined();
+    });
+
+    it('sanitizes folderName longer than 128 chars to undefined', async () => {
+        const parseIngestOptions = await loadParseIngestOptions();
+        const formData = new FormData();
+        formData.append('options', JSON.stringify({
+            folderName: 'a'.repeat(129),
+        }));
+
+        const parsed = parseIngestOptions(formData);
+        expect(parsed.folderName).toBeUndefined();
+    });
 });

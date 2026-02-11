@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
                 pageCount: doc.pageCount,
                 processingStatus: doc.processingStatus,
                 processingError: doc.processingError,
+                folderName: doc.folderName,
                 templateProfileId: doc.templateProfileId,
                 templateMatched: doc.templateMatched,
                 templateMatchScore: doc.templateMatchScore,

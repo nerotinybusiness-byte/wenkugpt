@@ -105,6 +105,7 @@ export const documents = pgTable('documents', {
 
   // Access control
   accessLevel: varchar('access_level', { length: 32 }).$type<AccessLevel>().default('private').notNull(),
+  folderName: varchar('folder_name', { length: 128 }),
 
   // Processing pipeline status
   processingStatus: varchar('processing_status', { length: 32 })

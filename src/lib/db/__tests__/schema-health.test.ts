@@ -29,6 +29,7 @@ describe('ingest schema health', () => {
                     { table_name: 'chunks', column_name: 'fts_vector' },
                     { table_name: 'chunks', column_name: 'is_template_boilerplate' },
                     { table_name: 'documents', column_name: 'template_profile_id' },
+                    { table_name: 'documents', column_name: 'folder_name' },
                     { table_name: 'documents', column_name: 'template_matched' },
                     { table_name: 'documents', column_name: 'template_match_score' },
                     { table_name: 'documents', column_name: 'template_boilerplate_chunks' },
@@ -61,6 +62,7 @@ describe('ingest schema health', () => {
                     { table_name: 'chunks', column_name: 'highlight_boxes' },
                     { table_name: 'chunks', column_name: 'embedding' },
                     { table_name: 'documents', column_name: 'template_profile_id' },
+                    { table_name: 'documents', column_name: 'folder_name' },
                 ],
             },
             {

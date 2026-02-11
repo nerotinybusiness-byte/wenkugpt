@@ -10,6 +10,7 @@ const REQUIRED_TABLE_COLUMNS = {
         'is_template_boilerplate',
     ],
     documents: [
+        'folder_name',
         'template_profile_id',
         'template_matched',
         'template_match_score',
