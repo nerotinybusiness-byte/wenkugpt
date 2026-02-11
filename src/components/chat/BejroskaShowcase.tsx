@@ -4,20 +4,32 @@ import { Sparkles } from 'lucide-react';
 import { type ElementType, useEffect, useState } from 'react';
 
 const ModelViewerTag = 'model-viewer' as unknown as ElementType;
-const BEJROSKA_MODEL_SRC = '/models/bejroska-hoodie.glb?v=2026-02-11-compressed-5';
+const BEJROSKA_PRIMARY_MODEL_SRC = '/models/bejroska-hoodie-fast.glb?v=2026-02-11-dual-1';
+const BEJROSKA_FALLBACK_MODEL_SRC = '/models/bejroska-hoodie-draco.glb?v=2026-02-11-dual-1';
 const DRACO_DECODER_LOCATION = '/model-viewer/draco/';
 const KTX2_TRANSCODER_LOCATION = '/model-viewer/basis/';
 const MODEL_LOAD_TIMEOUT_MS = 20000;
 
 type LoadPhase = 'booting' | 'loading' | 'ready' | 'error';
-type ErrorReason = 'import_failed' | 'model_error' | 'timeout';
+type ModelVariant = 'primary' | 'fallback';
+type ErrorReason = 'import_failed' | 'primary_error' | 'fallback_error' | 'timeout';
+
+const MODEL_SOURCE_BY_VARIANT: Record<ModelVariant, string> = {
+    primary: BEJROSKA_PRIMARY_MODEL_SRC,
+    fallback: BEJROSKA_FALLBACK_MODEL_SRC,
+};
 
 export default function BejroskaShowcase() {
     const [phase, setPhase] = useState<LoadPhase>(
         () => (typeof window !== 'undefined' && customElements.get('model-viewer') ? 'loading' : 'booting'),
     );
     const [errorReason, setErrorReason] = useState<ErrorReason | null>(null);
+    const [activeVariant, setActiveVariant] = useState<ModelVariant>('primary');
+    const [hasAttemptedFallback, setHasAttemptedFallback] = useState(false);
+    const [hasVisibleProgress, setHasVisibleProgress] = useState(false);
+    const [bootAttemptKey, setBootAttemptKey] = useState(0);
     const [viewerMountKey, setViewerMountKey] = useState(0);
+    const activeModelSrc = MODEL_SOURCE_BY_VARIANT[activeVariant];
 
     useEffect(() => {
         let isCancelled = false;
@@ -59,21 +71,29 @@ export default function BejroskaShowcase() {
         return () => {
             isCancelled = true;
         };
-    }, [viewerMountKey]);
+    }, [bootAttemptKey]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
         if (phase !== 'loading') return;
 
         const timeoutId = window.setTimeout(() => {
-            setErrorReason((current) => current ?? 'timeout');
+            if (activeVariant === 'primary' && !hasAttemptedFallback) {
+                setHasAttemptedFallback(true);
+                setActiveVariant('fallback');
+                setErrorReason(null);
+                setHasVisibleProgress(false);
+                setViewerMountKey((value) => value + 1);
+                return;
+            }
+            setErrorReason('timeout');
             setPhase((current) => (current === 'ready' ? current : 'error'));
         }, MODEL_LOAD_TIMEOUT_MS);
 
         return () => {
             window.clearTimeout(timeoutId);
         };
-    }, [phase, viewerMountKey]);
+    }, [activeVariant, hasAttemptedFallback, phase, viewerMountKey]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -86,14 +106,19 @@ export default function BejroskaShowcase() {
 
         if (viewer.loaded) {
             setErrorReason(null);
+            setHasVisibleProgress(true);
             setPhase('ready');
             return;
         }
 
         const handleProgress = (event: Event) => {
             const detail = (event as CustomEvent<{ totalProgress?: number }>).detail;
+            if (typeof detail?.totalProgress === 'number' && detail.totalProgress > 0) {
+                setHasVisibleProgress(true);
+            }
             if (typeof detail?.totalProgress === 'number' && detail.totalProgress >= 1) {
                 setErrorReason(null);
+                setHasVisibleProgress(true);
                 setPhase('ready');
             }
         };
@@ -107,16 +132,24 @@ export default function BejroskaShowcase() {
     const shouldRenderViewer = phase !== 'booting' && errorReason !== 'import_failed';
     const showErrorOverlay = phase === 'error';
     const showBootingOverlay = phase === 'booting';
-    const showLoadingBadge = phase === 'loading';
+    const showLoadingBadge = phase === 'loading' && !hasVisibleProgress;
     const errorMessage =
         errorReason === 'import_failed'
             ? 'Nacteni 3D vieweru selhalo.'
-            : errorReason === 'timeout'
-                ? 'Nacitani modelu trva prilis dlouho.'
-                : 'Model se nepodarilo nacist.';
+            : errorReason === 'primary_error'
+                ? 'Primarni model se nepodarilo nacist.'
+                : errorReason === 'fallback_error'
+                    ? 'Fallback model se nepodarilo nacist.'
+                    : errorReason === 'timeout'
+                        ? 'Nacitani modelu trva prilis dlouho.'
+                        : 'Model se nepodarilo nacist.';
     const handleRetry = () => {
         setErrorReason(null);
+        setActiveVariant('primary');
+        setHasAttemptedFallback(false);
+        setHasVisibleProgress(false);
         setPhase('booting');
+        setBootAttemptKey((value) => value + 1);
         setViewerMountKey((value) => value + 1);
     };
 
@@ -130,9 +163,9 @@ export default function BejroskaShowcase() {
         >
             {shouldRenderViewer ? (
                 <ModelViewerTag
-                    key={`${BEJROSKA_MODEL_SRC}-${viewerMountKey}`}
+                    key={`${activeModelSrc}-${viewerMountKey}`}
                     data-bejroska-viewer={viewerMountKey}
-                    src={BEJROSKA_MODEL_SRC}
+                    src={activeModelSrc}
                     alt="Bejroska hoodie"
                     camera-controls
                     auto-rotate
@@ -147,10 +180,19 @@ export default function BejroskaShowcase() {
                     style={{ width: '100%', height: '100%', borderRadius: '28px', background: 'transparent' }}
                     onLoad={() => {
                         setErrorReason(null);
+                        setHasVisibleProgress(true);
                         setPhase('ready');
                     }}
                     onError={() => {
-                        setErrorReason((current) => current ?? 'model_error');
+                        if (activeVariant === 'primary' && !hasAttemptedFallback) {
+                            setHasAttemptedFallback(true);
+                            setActiveVariant('fallback');
+                            setErrorReason(null);
+                            setHasVisibleProgress(false);
+                            setViewerMountKey((value) => value + 1);
+                            return;
+                        }
+                        setErrorReason(activeVariant === 'primary' ? 'primary_error' : 'fallback_error');
                         setPhase('error');
                     }}
                 />
