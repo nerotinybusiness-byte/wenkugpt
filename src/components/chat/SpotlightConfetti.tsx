@@ -278,7 +278,7 @@ export default function SpotlightConfetti({
                         margin: '0 auto 18px',
                         display: 'grid',
                         placeItems: 'center',
-                        filter: 'drop-shadow(0 18px 40px rgba(0,0,0,0.45))',
+                        boxShadow: '0 18px 40px rgba(0,0,0,0.45)',
                         transform: 'translateZ(0)',
                         animation: reduceMotion ? undefined : 'spotPop 420ms ease-out',
                     }}

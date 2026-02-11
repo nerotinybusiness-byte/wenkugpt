@@ -1,17 +1,37 @@
 'use client';
 
 import { Sparkles } from 'lucide-react';
-import { type ElementType, useEffect, useState } from 'react';
+import { type ElementType, useEffect, useRef, useState } from 'react';
 
 const ModelViewerTag = 'model-viewer' as unknown as ElementType;
 const BEJROSKA_MODEL_SRC = '/models/bejroska-hoodie.glb?v=2026-02-11-lightfix-1';
+const BEJROSKA_BASECOLOR_SRC = '/models/bejroska-hoodie-basecolor.jpg?v=2026-02-11-texturefix-1';
+
+type ModelViewerMaterial = {
+    pbrMetallicRoughness?: {
+        setBaseColorTexture?: (texture: unknown) => void;
+        setBaseColorFactor?: (factor: [number, number, number, number]) => void;
+        setMetallicFactor?: (value: number) => void;
+        setRoughnessFactor?: (value: number) => void;
+        baseColorTexture?: unknown;
+    };
+};
+
+type ModelViewerElementLike = HTMLElement & {
+    model?: {
+        materials?: ModelViewerMaterial[];
+    };
+    createTexture?: (url: string) => Promise<unknown>;
+};
 
 export default function BejroskaShowcase() {
+    const viewerRef = useRef<ModelViewerElementLike | null>(null);
     const [isReady, setIsReady] = useState(
         () => typeof window !== 'undefined' && Boolean(customElements.get('model-viewer')),
     );
     const [loadError, setLoadError] = useState(false);
     const [modelError, setModelError] = useState(false);
+    const [textureForced, setTextureForced] = useState(false);
 
     useEffect(() => {
         let isCancelled = false;
@@ -32,6 +52,37 @@ export default function BejroskaShowcase() {
             isCancelled = true;
         };
     }, []);
+
+    useEffect(() => {
+        const el = viewerRef.current;
+        if (!el) return;
+
+        const applyTextureOverride = async () => {
+            try {
+                const material = el.model?.materials?.[0];
+                const pbr = material?.pbrMetallicRoughness;
+                if (!pbr || !el.createTexture || !pbr.setBaseColorTexture) return;
+
+                const texture = await el.createTexture(BEJROSKA_BASECOLOR_SRC);
+                pbr.setBaseColorTexture(texture);
+                pbr.setBaseColorFactor?.([1, 1, 1, 1]);
+                pbr.setMetallicFactor?.(0);
+                pbr.setRoughnessFactor?.(0.8);
+                setTextureForced(true);
+            } catch {
+                setTextureForced(false);
+            }
+        };
+
+        const onLoad = () => {
+            void applyTextureOverride();
+        };
+
+        el.addEventListener('load', onLoad);
+        return () => {
+            el.removeEventListener('load', onLoad);
+        };
+    }, [isReady]);
 
     const shouldFallback = loadError || modelError || !isReady;
 
@@ -55,6 +106,7 @@ export default function BejroskaShowcase() {
             ) : (
                 <>
                     <ModelViewerTag
+                        ref={viewerRef}
                         src={BEJROSKA_MODEL_SRC}
                         alt="Bejroska hoodie"
                         camera-controls
@@ -81,6 +133,11 @@ export default function BejroskaShowcase() {
                             boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.09), inset 0 -12px 26px rgba(0,0,0,0.35)',
                         }}
                     />
+                    {textureForced ? null : (
+                        <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/35 px-2 py-1 text-[10px] text-white/65">
+                            texture sync...
+                        </div>
+                    )}
                 </>
             )}
         </div>
