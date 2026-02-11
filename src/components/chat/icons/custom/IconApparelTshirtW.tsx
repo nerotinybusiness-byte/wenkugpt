@@ -1,11 +1,11 @@
 import type { CustomSuggestionIconProps } from './types';
 
-export function IconSportHelmet(props: CustomSuggestionIconProps) {
+export function IconApparelTshirtW(props: CustomSuggestionIconProps) {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" {...props}>
             <g strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}>
-                <path d="M4 13.1A8 8 0 0 1 12 5.1A8 8 0 0 1 20 13.1V14.8H4V13.1Z" />
-                <path d="M10.2 14.8V17.4H7.6M15.8 9.8H18.2" />
+                <path d="M8.2 5.1H15.8L19 7.8L17.1 10.1L15.2 8.8V18.6H8.8V8.8L6.9 10.1L5 7.8L8.2 5.1Z" />
+                <path d="M9.5 12.9L10.3 15.2L12 13L13.7 15.2L14.5 12.9" />
             </g>
         </svg>
     );
