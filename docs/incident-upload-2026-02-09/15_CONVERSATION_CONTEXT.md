@@ -31,3 +31,8 @@ Purpose: compact record of user requests and responses that influence implementa
 - User requested a favicon derived from the liquid-glass chat-bubble icon; favicon deployment completed.
 - User requested hero text rename from `Liquid Glass Chat` to `WenkuGPT`; local patch applied.
 - User requested another full markdown sync so continuation in a new context window has no gaps.
+- User requested Bejroska easter-egg panel with `Send + Show together` behavior and asked where to place the GLB file.
+- User confirmed local GLB path and asked for immediate commit/push/deploy.
+- User asked why model did not show on production alias; requested root-cause and actionable fix plan.
+- User requested final handoff-ready markdown update so implementation can continue in a fresh context window without rediscovery.
+- User requested Bejroska showcase to stay open until manual user click (no automatic timeout close).

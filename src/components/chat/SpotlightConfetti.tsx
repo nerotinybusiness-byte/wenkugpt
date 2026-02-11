@@ -8,6 +8,7 @@ interface SpotlightConfettiProps {
     title?: string;
     subtitle?: string;
     durationMs?: number;
+    autoClose?: boolean;
     blurPx?: number;
     dimOpacity?: number;
     holeRadius?: number;
@@ -127,6 +128,7 @@ export default function SpotlightConfetti({
     title = 'Reward unlocked!',
     subtitle = 'You got a new item',
     durationMs = 1800,
+    autoClose = true,
     blurPx = 10,
     dimOpacity = 0.72,
     holeRadius = 150,
@@ -173,10 +175,10 @@ export default function SpotlightConfetti({
     }, [open, closeOnEsc, onClose]);
 
     useEffect(() => {
-        if (!open) return undefined;
+        if (!open || !autoClose) return undefined;
         const timeout = window.setTimeout(() => onClose?.(), durationMs);
         return () => window.clearTimeout(timeout);
-    }, [open, durationMs, onClose]);
+    }, [open, autoClose, durationMs, onClose]);
 
     if (!open) return null;
 

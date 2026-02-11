@@ -3,7 +3,6 @@
 import { Sparkles } from 'lucide-react';
 import { type ElementType, useEffect, useState } from 'react';
 
-const MODEL_VIEWER_SCRIPT_ID = 'google-model-viewer-script';
 const ModelViewerTag = 'model-viewer' as unknown as ElementType;
 
 export default function BejroskaShowcase() {
@@ -14,28 +13,23 @@ export default function BejroskaShowcase() {
     const [modelError, setModelError] = useState(false);
 
     useEffect(() => {
+        let isCancelled = false;
         if (typeof window === 'undefined') return;
         if (customElements.get('model-viewer')) return;
 
-        const existing = document.getElementById(MODEL_VIEWER_SCRIPT_ID) as HTMLScriptElement | null;
-        if (existing) {
-            const onLoad = () => setIsReady(true);
-            const onError = () => setLoadError(true);
-            existing.addEventListener('load', onLoad);
-            existing.addEventListener('error', onError);
-            return () => {
-                existing.removeEventListener('load', onLoad);
-                existing.removeEventListener('error', onError);
-            };
-        }
+        void import('@google/model-viewer')
+            .then(() => {
+                if (isCancelled) return;
+                setIsReady(Boolean(customElements.get('model-viewer')));
+            })
+            .catch(() => {
+                if (isCancelled) return;
+                setLoadError(true);
+            });
 
-        const script = document.createElement('script');
-        script.id = MODEL_VIEWER_SCRIPT_ID;
-        script.type = 'module';
-        script.src = 'https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js';
-        script.onload = () => setIsReady(true);
-        script.onerror = () => setLoadError(true);
-        document.head.appendChild(script);
+        return () => {
+            isCancelled = true;
+        };
     }, []);
 
     const shouldFallback = loadError || modelError || !isReady;
@@ -51,10 +45,7 @@ export default function BejroskaShowcase() {
                         <Sparkles className="h-5 w-5 text-[var(--c-action)]" />
                     </div>
                     <p className="max-w-[220px] text-sm text-white/80">
-                        Bejroska show pripraven. Vloz model do
-                        {' '}
-                        <code className="rounded bg-black/30 px-1 py-0.5 text-xs">public/models/bejroska-hoodie.glb</code>
-                        .
+                        Nacitam Bejroska model. Pokud se nezobrazi, zavri overlay a zkus to znovu.
                     </p>
                 </div>
             ) : (

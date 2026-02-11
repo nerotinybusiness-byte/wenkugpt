@@ -94,3 +94,52 @@ Empty-state UX update (2026-02-11, latest):
 6. Branding parity update:
    - favicon switched to liquid-glass chat bubble (`public/favicon.svg`, metadata in `src/app/layout.tsx`).
    - hero title text normalization to `WenkuGPT` is currently local and pending deployment.
+
+Bejroska easter-egg follow-up (new immediate plan):
+1. Current production symptom:
+   - `Bejroska?` card triggers chat + overlay, but 3D hoodie model is often not visible.
+2. Confirmed likely root causes from code:
+   - `src/components/chat/BejroskaShowcase.tsx` loads `model-viewer` via `https://unpkg.com/...`.
+   - production CSP in `src/proxy.ts` uses `script-src 'self' 'unsafe-inline'`, so external unpkg script is blocked.
+   - overlay auto-closes after `3000ms` (`durationMs={3000}` in `src/components/chat/ChatPanel.tsx`), which is short for ~23MB GLB cold load.
+3. Decision-complete implementation plan:
+   1. Replace remote script loading with local package import:
+      - add dependency `@google/model-viewer`
+      - remove unpkg `<script>` injection logic
+      - register model-viewer from local module inside client code
+   2. Keep CSP strict (`script-src 'self'`) and do not whitelist unpkg.
+   3. Extend overlay timing:
+      - default from 3000ms to 8000ms OR close after `max(3000ms, model-ready)` with hard cap 12000ms.
+      - preferred: model-ready close rule with hard cap.
+   4. Keep fallback UI when GLB fails to load (no chat regression).
+   5. Validate:
+      - `npm run lint`
+      - `npx tsc --noEmit --incremental false`
+      - `npm run build`
+      - manual production check on alias: card click => query sent + model visibly rendered.
+4. Constraints:
+   - no API/DB changes
+   - keep `Send + Show together` behavior for `Bejroska?`
+   - keep docs append-only (`09/10/14/15`) after fix deploy.
+
+Bejroska easter-egg status refresh (2026-02-11, latest):
+1. Deployed production alias currently points to:
+   - deployment id `dpl_BoBmwbCDZmDHqaWRW6vmVvXG4TMW`
+   - URL `https://wenkugpt-copy-8cuublfo0-nerotinys-projects.vercel.app`
+   - alias `https://wenkugpt-copy.vercel.app`
+2. GLB asset is now committed in repo and deployed:
+   - commit `95106d5` (`chore(chat): add Bejroska hoodie GLB asset`)
+   - file path `public/models/bejroska-hoodie.glb`
+   - runtime URL `/models/bejroska-hoodie.glb`
+3. Symptom still open:
+   - overlay opens, but model may not render before close for some clients.
+4. Locked implementation plan for next window:
+   1. Replace remote `unpkg` loader in `src/components/chat/BejroskaShowcase.tsx` with local package import (`@google/model-viewer`) so CSP `script-src 'self'` remains valid.
+   2. Keep CSP strict in `src/proxy.ts` (do not whitelist external script origins).
+   3. Adjust overlay close behavior in `src/components/chat/ChatPanel.tsx`:
+      - replace fixed `durationMs=3000` with model-ready aware close (`min 3000ms`, hard cap `12000ms`).
+   4. Keep fallback rendering path if model load fails (chat send must remain unaffected).
+   5. Run gates: `npm run lint`, `npx tsc --noEmit --incremental false`, `npm run build`.
+   6. Deploy prod and verify on alias:
+      - `HEAD /models/bejroska-hoodie.glb` returns `200`
+      - click `Bejroska?` shows visible model before overlay close.

@@ -146,3 +146,17 @@ Fix missing `x-user-email` propagation in browser API requests.
    - alias `https://wenkugpt-copy.vercel.app` ready.
 12. `in_progress` Final visual tuning pass by user feedback (icon detail polish + card copy curation).
 13. `in_progress` Empty-state hero title normalization (`Liquid Glass Chat` -> `WenkuGPT`) is implemented locally and awaiting commit/push/deploy.
+
+## Bejroska easter-egg model visibility hotfix (2026-02-11)
+1. `done` Confirm production symptom: overlay appears but 3D hoodie often not rendered.
+2. `done` Identify likely technical cause: remote `unpkg` model-viewer script blocked by production CSP (`script-src 'self'`).
+3. `done` Identify UX cause: `durationMs=3000` likely too short for cold-load GLB render window.
+4. `done` Add GLB asset to repo and deploy:
+   - file `public/models/bejroska-hoodie.glb`
+   - commit `95106d5`
+   - alias now points to deployment `dpl_BoBmwbCDZmDHqaWRW6vmVvXG4TMW`.
+5. `done` Replace remote script injection with local package import (`@google/model-viewer`) in client component.
+6. `done` Keep CSP strict (no unpkg whitelist).
+7. `done` Apply user-requested manual close policy (disable auto-close; keep overlay open until user click).
+8. `planned` Preserve fallback path when GLB load fails.
+9. `in_progress` Run gates (`lint`, `tsc`, `build`) and deploy alias update (gates green; deploy pending).

@@ -668,7 +668,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                 onClose={() => setIsBejroskaOpen(false)}
                 title="Bejroska activated!"
                 subtitle="Wenku hoodie showcase"
-                durationMs={3000}
+                autoClose={false}
                 holeRadius={140}
             >
                 <BejroskaShowcase />

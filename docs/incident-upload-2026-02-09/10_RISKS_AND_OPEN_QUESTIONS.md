@@ -69,6 +69,16 @@
 - Mitigation: always log local pending deltas explicitly in handoff prompt/live log and complete commit+deploy before closure.
 - Status: in progress.
 
+15. Bejroska model-viewer loader vs CSP mismatch (opened 2026-02-11)
+- Risk: loading `model-viewer` from remote CDN (`unpkg`) conflicts with production CSP (`script-src 'self'`), so 3D component may not initialize.
+- Mitigation: switch to local package import (`@google/model-viewer`) and keep CSP strict.
+- Status: mitigated in local code; production deploy verification pending.
+
+16. Bejroska overlay timeout vs model cold-load (opened 2026-02-11)
+- Risk: fixed `3000ms` overlay close can end showcase before a ~23MB GLB is visibly rendered on slower clients.
+- Mitigation: user-requested manual close policy applied locally (no auto-timeout); showcase remains open until user click.
+- Status: partially mitigated locally (pending production deploy and local-loader migration).
+
 ## Open questions requiring decision
 1. What is canonical client-side identity source?
 - Option A: `NEXT_PUBLIC_DEFAULT_USER_EMAIL` (simple, static)
@@ -104,6 +114,9 @@
 
 11. Should branding text in empty-state hero be permanently locked to `WenkuGPT`?
 - Proposed default: yes, lock to `WenkuGPT` and avoid marketing-title experiments unless explicitly requested.
+
+12. For Bejroska overlay close policy, do we prefer deterministic timeout or model-ready close with cap?
+- Proposed default: model-ready close with hard cap `12000ms` and minimum visible window `3000ms`.
 
 ## Exit criteria for incident closure
 - Header propagation fixed and verified in browser.

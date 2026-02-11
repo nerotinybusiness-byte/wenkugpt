@@ -2,7 +2,7 @@
 
 Last Updated: 2026-02-11
 Incident Scope: Upload failures in Knowledge Base UI (`DOMMatrix is not defined`) and API auth failures (`Missing identity header. Set x-user-email.`)
-Status: Core ingest incident resolved in production; active follow-up moved to chat empty-state UX polish (suggestions, motion, custom icon system V2) plus branding polish (`WenkuGPT` hero title / favicon consistency).
+Status: Core ingest incident resolved in production; active follow-up is Bejroska easter-egg model visibility hotfix (CSP-safe model-viewer loading + overlay timing).
 
 ## Maintenance policy
 This folder is a living runbook.
@@ -47,14 +47,19 @@ The objective is zero context loss across chat windows.
   - premium motion tuning,
   - custom inline SVG icon system (V1 -> V2 refresh),
   - rope icon removal from V2 set.
-- New focus (2026-02-11, latest): branding consistency in chat hero:
-  - liquid-glass chat-bubble favicon added,
-  - empty-state hero title normalized to `WenkuGPT` (local patch pending deploy).
+- New focus (2026-02-11, latest): Bejroska easter-egg runtime visibility:
+  - GLB asset shipped in `public/models/bejroska-hoodie.glb` (commit `95106d5`),
+  - production alias updated to latest deploy,
+  - remaining issue is model readiness in overlay flow (CSP + close timing).
 - Latest production deploy:
-  - deployment id `dpl_9xtSkacA1E3YSw4pju88N54GwDiH`
-  - URL `https://wenkugpt-copy-diwcxv4fg-nerotinys-projects.vercel.app`
+  - deployment id `dpl_BoBmwbCDZmDHqaWRW6vmVvXG4TMW`
+  - URL `https://wenkugpt-copy-8cuublfo0-nerotinys-projects.vercel.app`
   - alias `https://wenkugpt-copy.vercel.app`
 
 ## Immediate next action
-Commit/push/deploy latest empty-state hero title change (`Liquid Glass Chat` -> `WenkuGPT`), then run final visual QA pass on alias (icon consistency, hover/motion feel, dark/light parity).
+Implement and deploy Bejroska visibility fix:
+1. replace remote `model-viewer` loader with local `@google/model-viewer`,
+2. keep CSP strict,
+3. switch overlay close logic to model-ready aware timing with hard cap,
+4. run `lint + tsc + build` and validate on alias.
 

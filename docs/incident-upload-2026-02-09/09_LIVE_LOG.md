@@ -313,3 +313,42 @@ Use this file as append-only progress log.
   - file: `src/components/chat/EmptyState.tsx`
   - change: hero heading text `Liquid Glass Chat` -> `WenkuGPT`.
   - current status: implemented locally, awaiting push/deploy step.
+
+- Bejroska easter-egg production follow-up opened:
+  - user reported 3D hoodie not visible in spotlight overlay on deployed alias.
+  - quick code review indicates two likely contributors:
+    1. CSP blocks remote `model-viewer` loader from `unpkg.com` (`script-src 'self'` in `src/proxy.ts`).
+    2. overlay auto-close uses `durationMs=3000` in `src/components/chat/ChatPanel.tsx`, too short for cold-load of ~23MB GLB.
+  - plan recorded in handoff prompt:
+    - switch to local `@google/model-viewer` import (no CSP relaxation),
+    - increase/condition overlay close timing,
+    - keep fallback rendering and warning-free chat flow,
+    - run full gates and re-deploy.
+- Bejroska GLB asset rollout completed:
+  - committed `public/models/bejroska-hoodie.glb` in commit `95106d5` (`chore(chat): add Bejroska hoodie GLB asset`).
+  - production deployment confirmed:
+    - deployment id `dpl_BoBmwbCDZmDHqaWRW6vmVvXG4TMW`
+    - URL `https://wenkugpt-copy-8cuublfo0-nerotinys-projects.vercel.app`
+    - alias `https://wenkugpt-copy.vercel.app` updated.
+- Runtime verification:
+  - model file path is valid in app build: `/models/bejroska-hoodie.glb`.
+  - direct HEAD check from local PowerShell had an `Invoke-WebRequest` null-reference issue; asset accessibility should be confirmed in browser network tab or with a non-PowerShell HTTP client.
+- Current blocker remains visual readiness:
+  - some runs still close overlay before model is visibly rendered.
+  - next implementation step is local `@google/model-viewer` import + model-ready close timing policy.
+
+- Bejroska spotlight close-policy update (2026-02-11, local):
+  - user requested that showcase does not auto-close and stays open until user click.
+  - implemented `autoClose` switch in `src/components/chat/SpotlightConfetti.tsx`.
+  - wired Bejroska overlay to manual-close mode in `src/components/chat/ChatPanel.tsx` (`autoClose={false}`).
+  - local validation passed: `npm run lint`, `npx tsc --noEmit --incremental false`, `npm run build`.
+
+- Bejroska model-viewer CSP-safe loader update (2026-02-11, local):
+  - added dependency `@google/model-viewer`.
+  - replaced remote `unpkg` script dependency path with client-only dynamic module import in `src/components/chat/BejroskaShowcase.tsx`.
+  - kept fallback UI path active for load/model errors.
+  - re-validated local gates after fix:
+    - `npm run lint` passed.
+    - `npx tsc --noEmit --incremental false` passed.
+    - `npm run build` passed.
+  - next action: commit/push + production deploy + alias runtime verification.
