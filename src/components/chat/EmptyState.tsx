@@ -1,11 +1,11 @@
-import { MessageSquare, Sparkles, Search, FileText, Phone } from 'lucide-react';
+import { Code2, Lightbulb, LayoutTemplate, SlidersHorizontal } from 'lucide-react';
 
 interface EmptyStateProps {
     onSuggestionSelect?: (prompt: string) => void;
 }
 
 interface SuggestionItem {
-    icon: typeof Sparkles;
+    icon: typeof Lightbulb;
     title: string;
     subtitle: string;
     prompt: string;
@@ -14,61 +14,74 @@ interface SuggestionItem {
 export default function EmptyState({ onSuggestionSelect }: EmptyStateProps) {
     const suggestions: SuggestionItem[] = [
         {
-            icon: Sparkles,
-            title: 'Shrn hlavni body',
-            subtitle: 'Rychly prehled z nahranych dokumentu',
-            prompt: 'Shrn prosim hlavni body z mych nahranych dokumentu do 5 strucnych odrazek.',
+            icon: Lightbulb,
+            title: 'Explain the liquid glass effect',
+            subtitle: "Learn about Apple's design language",
+            prompt: 'Explain the liquid glass effect and when to use it in modern UI.',
         },
         {
-            icon: Search,
-            title: 'Najdi konkretni info',
-            subtitle: 'Vyhledani jmena, terminu nebo casti textu',
-            prompt: 'Najdi v dokumentech vsechny zminky o kontaktu Jiri Zabilansky a uved zdroj.',
+            icon: Code2,
+            title: 'Best practices for LLM UI',
+            subtitle: 'Discover interface design principles',
+            prompt: 'What are the best practices for building high-quality LLM chat interfaces?',
         },
         {
-            icon: Phone,
-            title: 'Vypis kontakty',
-            subtitle: 'Jmena a telefonni cisla presne podle dokumentu',
-            prompt: 'Vypis vsechny osoby a telefonni cisla presne tak, jak jsou uvedene v dokumentech.',
+            icon: SlidersHorizontal,
+            title: 'CSS backdrop-filter effects',
+            subtitle: 'Master modern blur techniques',
+            prompt: 'Show practical CSS backdrop-filter patterns for liquid glass UI.',
         },
         {
-            icon: FileText,
-            title: 'Porovnej dokumenty',
-            subtitle: 'Co se mezi verzemi zmenilo',
-            prompt: 'Porovnej hlavni rozdily mezi nahranymi dokumenty a napis, co se zmenilo.',
+            icon: LayoutTemplate,
+            title: 'Responsive design patterns',
+            subtitle: 'Build adaptive interfaces',
+            prompt: 'Give me responsive design patterns for desktop and mobile chat layouts.',
         },
     ];
 
     return (
-        <div className="flex flex-col items-center justify-center h-full p-8">
-            <div className="relative mb-12">
-                <div className="relative w-24 h-24 rounded-[32px] flex items-center justify-center mb-8 mx-auto shadow-2xl ring-1 ring-white/10 bg-white/5 backdrop-blur-3xl">
-                    <MessageSquare className="w-10 h-10 text-[var(--c-content)]/80" strokeWidth={1.1} />
+        <div className="flex h-full flex-col items-center justify-center p-8">
+            <div className="mb-10 flex flex-col items-center">
+                <div className="mb-8 flex h-20 w-20 items-center justify-center rounded-3xl liquid-glass">
+                    <svg
+                        className="h-10 w-10"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        style={{ color: 'var(--c-action)' }}
+                    >
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                        />
+                    </svg>
                 </div>
 
-                <h2 className="text-4xl font-medium text-center tracking-tight text-[var(--c-content)] mb-3" style={{ fontFamily: 'var(--font-ui)' }}>
-                    WenkuGPT
-                </h2>
-                <p className="text-[var(--c-content)]/55 text-center text-lg font-light tracking-wide">
-                    Zacni konverzaci jednim kliknutim.
+                <h1 className="mb-2 text-4xl font-semibold text-[var(--c-content)]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    Liquid Glass Chat
+                </h1>
+                <p className="text-center text-2xl text-[var(--c-content)]/50" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    Start a conversation with AI
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl w-full">
+            <div className="grid w-full max-w-4xl grid-cols-1 gap-4 md:grid-cols-2">
                 {suggestions.map((suggestion) => (
                     <button
                         key={suggestion.title}
                         type="button"
                         onClick={() => onSuggestionSelect?.(suggestion.prompt)}
-                        className="liquid-glass w-full rounded-[24px] p-5 text-center transition-colors duration-200 hover:text-[var(--c-action)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-action)]/60"
+                        className="liquid-glass w-full rounded-[24px] p-5 text-left transition-colors duration-200 hover:text-[var(--c-action)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-action)]/60"
                     >
-                        <div className="flex flex-col items-center gap-3">
-                            <suggestion.icon className="w-6 h-6 text-[var(--c-action)]" strokeWidth={1.6} />
+                        <div className="flex items-start gap-4">
+                            <suggestion.icon className="mt-0.5 h-6 w-6 text-[var(--c-action)]" strokeWidth={1.8} />
                             <div>
-                                <h3 className="font-medium text-[15px] text-[var(--c-content)] tracking-wide mb-0.5" style={{ fontFamily: 'var(--font-ui)' }}>
+                                <h3 className="mb-0.5 text-[15px] font-medium tracking-wide text-[var(--c-content)]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                                     {suggestion.title}
                                 </h3>
-                                <p className="text-[13px] text-[var(--c-content)]/55 font-light">
+                                <p className="text-[13px] text-[var(--c-content)]/55" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                                     {suggestion.subtitle}
                                 </p>
                             </div>
