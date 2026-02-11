@@ -17,6 +17,7 @@
     "db:check-ingest-schema": "npx tsx scripts/check_ingest_schema.ts --strict",
     "template:build-profile": "npx tsx scripts/build_template_profile.ts",
     "model:optimize:bejroska": "node scripts/optimize_bejroska_model.mjs",
+    "model:build:bejroska-png": "node scripts/build_bejroska_png_models.mjs",
     "test": "vitest",
     "test:run": "vitest run"
   },

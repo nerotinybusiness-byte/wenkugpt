@@ -4,8 +4,8 @@ import { Sparkles } from 'lucide-react';
 import { type ElementType, useEffect, useState } from 'react';
 
 const ModelViewerTag = 'model-viewer' as unknown as ElementType;
-const BEJROSKA_PRIMARY_MODEL_SRC = '/models/bejroska-hoodie-fast.glb?v=2026-02-11-dual-1';
-const BEJROSKA_FALLBACK_MODEL_SRC = '/models/bejroska-hoodie-draco.glb?v=2026-02-11-dual-1';
+const BEJROSKA_PRIMARY_MODEL_SRC = '/models/bejroska-hoodie-fast-png.glb?v=2026-02-12-png-1';
+const BEJROSKA_FALLBACK_MODEL_SRC = '/models/bejroska-hoodie-draco-png.glb?v=2026-02-12-png-1';
 const DRACO_DECODER_LOCATION = '/model-viewer/draco/';
 const KTX2_TRANSCODER_LOCATION = '/model-viewer/basis/';
 const MODEL_LOAD_TIMEOUT_MS = 20000;
