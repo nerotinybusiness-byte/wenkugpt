@@ -41,8 +41,8 @@ export default function EmptyState({ onSuggestionSelect }: EmptyStateProps) {
 
     return (
         <div className="flex flex-col items-center justify-center h-full p-8">
-            <div className="relative mb-10">
-                <div className="absolute inset-0 bg-[var(--c-action)]/10 blur-[72px] rounded-full" />
+            <div className="relative mb-12">
+                <div className="absolute inset-0 bg-blue-500/10 blur-[80px] rounded-full" />
 
                 <div className="relative w-24 h-24 rounded-[32px] flex items-center justify-center mb-8 mx-auto shadow-2xl ring-1 ring-white/10 bg-white/5 backdrop-blur-3xl">
                     <MessageSquare className="w-10 h-10 text-[var(--c-content)]/80" strokeWidth={1.1} />
@@ -52,7 +52,7 @@ export default function EmptyState({ onSuggestionSelect }: EmptyStateProps) {
                     WenkuGPT
                 </h2>
                 <p className="text-[var(--c-content)]/55 text-center text-lg font-light tracking-wide">
-                    Zacni konverzaci jednim kliknutim.
+                    Designed for 2026.
                 </p>
             </div>
 
