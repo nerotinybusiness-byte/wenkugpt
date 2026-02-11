@@ -31,5 +31,7 @@ describe('GET /api/ingest smoke', () => {
         });
         expect(payload.data.endpoints.POST.description).toBe('Upload and process a document');
         expect(payload.data.limits.allowedTypes).toEqual(['application/pdf', 'text/plain']);
+        expect(payload.data.endpoints.POST.fields.options).toContain('emptyChunkOcrEnabled');
+        expect(payload.data.endpoints.POST.fields.options).toContain('emptyChunkOcrEngine');
     });
 });

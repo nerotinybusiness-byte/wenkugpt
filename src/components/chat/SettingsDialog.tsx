@@ -26,9 +26,11 @@ import { Settings, RotateCcw } from "lucide-react";
 import {
     useSettings,
     RAG_ENGINES,
+    OCR_ENGINES,
     AMBIGUITY_POLICIES,
     GEMINI_MODELS,
     CLAUDE_MODELS,
+    type OcrEngineId,
     type RAGEngineId,
     type AmbiguityPolicyId,
 } from "@/lib/settings/store";
@@ -50,6 +52,8 @@ export function SettingsDialog() {
         vectorWeight: state.vectorWeight,
         textWeight: state.textWeight,
         confidenceThreshold: state.confidenceThreshold,
+        emptyChunkOcrEnabled: state.emptyChunkOcrEnabled,
+        emptyChunkOcrEngine: state.emptyChunkOcrEngine,
         setRagEngine: state.setRagEngine,
         setContextScopeField: state.setContextScopeField,
         setEffectiveAt: state.setEffectiveAt,
@@ -62,6 +66,8 @@ export function SettingsDialog() {
         setVectorWeight: state.setVectorWeight,
         setTextWeight: state.setTextWeight,
         setConfidenceThreshold: state.setConfidenceThreshold,
+        setEmptyChunkOcrEnabled: state.setEmptyChunkOcrEnabled,
+        setEmptyChunkOcrEngine: state.setEmptyChunkOcrEngine,
         resetToDefaults: state.resetToDefaults,
     })));
 
@@ -352,7 +358,53 @@ export function SettingsDialog() {
                         </div>
                     </div>
 
-                    {/* SECTION 5: APPEARANCE */}
+                    {/* SECTION 5: INGEST */}
+                    <div className="space-y-4">
+                        <h3 className={`text-sm font-semibold uppercase tracking-wider border-b pb-2 ${subTextColor} ${borderColor}`}>
+                            Ingest
+                        </h3>
+
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label className={textColor}>OCR rescue for empty/low PDF chunks</Label>
+                                <p className={`text-xs ${subTextColor}`}>
+                                    Applies only to PDF uploads when the first chunking pass returns zero or very few chunks.
+                                </p>
+                            </div>
+                            <Switch
+                                checked={settings.emptyChunkOcrEnabled}
+                                onCheckedChange={settings.setEmptyChunkOcrEnabled}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="ocr-engine" className={textColor}>OCR engine for rescue</Label>
+                            <Select
+                                value={settings.emptyChunkOcrEngine}
+                                onValueChange={(value) => settings.setEmptyChunkOcrEngine(value as OcrEngineId)}
+                                disabled={!settings.emptyChunkOcrEnabled}
+                            >
+                                <SelectTrigger
+                                    id="ocr-engine"
+                                    className={`w-full ${isDark ? 'bg-[#27272a] border-[#3f3f46]' : 'bg-[#f4f4f5] border-[#e4e4e7]'} ${textColor}`}
+                                >
+                                    <SelectValue placeholder="Select OCR engine" />
+                                </SelectTrigger>
+                                <SelectContent position="popper" className={`${bgColor} ${borderColor} ${textColor} shadow-xl max-h-[300px]`}>
+                                    {OCR_ENGINES.map((engine) => (
+                                        <SelectItem key={engine.id} value={engine.id} className="focus:bg-accent focus:text-accent-foreground">
+                                            <div className="flex flex-col items-start text-left py-1">
+                                                <span className="font-medium text-sm">{engine.name}</span>
+                                                <span className="text-xs opacity-70">{engine.description}</span>
+                                            </div>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    {/* SECTION 6: APPEARANCE */}
                     <div className="space-y-4">
                         <h3 className={`text-sm font-semibold uppercase tracking-wider border-b pb-2 ${subTextColor} ${borderColor}`}>
                             Appearance

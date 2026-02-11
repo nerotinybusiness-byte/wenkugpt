@@ -1,6 +1,6 @@
 # Upload Incident Docs Index
 
-Last Updated: 2026-02-10
+Last Updated: 2026-02-11
 Incident Scope: Upload failures in Knowledge Base UI (`DOMMatrix is not defined`) and API auth failures (`Missing identity header. Set x-user-email.`)
 Status: Incident baseline stabilized; PDF citation highlight precision remediation is in progress.
 
@@ -40,6 +40,7 @@ The objective is zero context loss across chat windows.
 - Frontend side: key `/api/*` calls do not send `x-user-email`, causing auth failures in production.
 - User-visible outcome: uploads and chat can fail even when backend endpoints are healthy.
 - New focus (2026-02-10): page-wide PDF citation highlight caused by coarse chunk bbox/matching behavior.
+- New focus (2026-02-11): OCR rescue engine switch (`gemini`/`tesseract`) with user-level setting, no-fallback policy, and warning-only behavior.
 
 ## Immediate next action
 Ship end-to-end PDF highlight precision fix, then reupload/reingest documents and validate on the known problematic citation flow.

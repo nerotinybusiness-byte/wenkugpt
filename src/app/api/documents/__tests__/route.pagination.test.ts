@@ -29,6 +29,18 @@ function makeDoc(id: string, createdAtIso: string) {
         fileSize: 1024,
         pageCount: 3,
         processingStatus: 'completed',
+        processingError: null,
+        templateProfileId: 'wenku-manual-v1',
+        templateMatched: true,
+        templateMatchScore: 0.9,
+        templateBoilerplateChunks: 1,
+        templateDetectionMode: 'text',
+        templateWarnings: null,
+        ocrRescueApplied: true,
+        ocrRescueEngine: 'gemini',
+        ocrRescueFallbackEngine: null,
+        ocrRescueChunksRecovered: 4,
+        ocrRescueWarnings: null,
         createdAt: new Date(createdAtIso),
     };
 }
@@ -69,6 +81,10 @@ describe('GET /api/documents pagination', () => {
         expect(payload.success).toBe(true);
         expect(payload.data.documents).toHaveLength(2);
         expect(payload.data.documents[0].id).toBe('doc-1');
+        expect(payload.data.documents[0].ocrRescueApplied).toBe(true);
+        expect(payload.data.documents[0].ocrRescueEngine).toBe('gemini');
+        expect(payload.data.documents[0].ocrRescueFallbackEngine).toBeNull();
+        expect(payload.data.documents[0].ocrRescueChunksRecovered).toBe(4);
         expect(payload.data.nextCursor).toBe('2026-01-02T00:00:00.000Z');
         expect(mocks.limit).toHaveBeenCalledWith(3);
         expect(mocks.where).not.toHaveBeenCalled();

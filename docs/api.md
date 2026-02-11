@@ -58,17 +58,35 @@ Error responses:
     - `templateBoilerplateChunks?: number`
     - `templateDetectionMode?: 'text' | 'ocr' | 'hybrid' | 'none' | null`
     - `templateWarnings?: string[] | null`
+    - `ocrRescueApplied?: boolean`
+    - `ocrRescueEngine?: string | null`
+    - `ocrRescueFallbackEngine?: string | null`
+    - `ocrRescueChunksRecovered?: number`
+    - `ocrRescueWarnings?: string[] | null`
 - `DELETE /api/documents/:id` -> `data: { id, message }`
 - `GET /api/documents/:id/preview` -> `data: { content }`
-- `POST /api/ingest` -> `data: { documentId, stats, template }`
+- `POST /api/ingest` -> `data: { documentId, stats, template, ocrRescue }`
   - `options` supports:
     - `templateProfileId?: string` (override default template profile registry selection)
+    - `emptyChunkOcrEnabled?: boolean` (enable OCR rescue when initial PDF chunk count is very low)
+    - `emptyChunkOcrEngine?: 'gemini' | 'tesseract'` (invalid/missing resolves to `gemini`)
   - `template` shape:
     - `profileId: string | null`
     - `matched: boolean`
     - `matchScore: number | null`
     - `detectionMode: 'text' | 'ocr' | 'hybrid' | 'none'`
     - `boilerplateChunks: number`
+    - `warnings: string[]`
+  - `ocrRescue` shape:
+    - `enabled: boolean`
+    - `attempted: boolean`
+    - `applied: boolean`
+    - `engine: 'gemini' | 'tesseract' | null`
+    - `fallbackEngine: 'gemini' | 'tesseract' | null` (currently always `null`)
+    - `engineUsed: 'gemini' | 'tesseract' | null`
+    - `chunksBefore: number`
+    - `chunksAfter: number`
+    - `pagesAttempted: number`
     - `warnings: string[]`
 - `GET /api/ingest` -> `data: { name, version, endpoints, limits }`
 - `GET /api/health` -> `data: { status, db, durationMs }` on success
@@ -84,4 +102,8 @@ Error responses:
 
 - `TEMPLATE_AWARE_FILTERING_ENABLED` - enable template profile matching and boilerplate chunk exclusion from retrieval index.
 - `TEMPLATE_OCR_FALLBACK_ENABLED` - enable Gemini OCR fallback for sampled PDF pages with weak/no text layer.
+
+## OCR Rescue Runtime Flags
+
+- `OCR_TESSERACT_ENABLED` - enable/disable Tesseract OCR engine for empty/low chunk rescue (`true` by default).
 

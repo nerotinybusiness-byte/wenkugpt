@@ -34,6 +34,11 @@ describe('ingest schema health', () => {
                     { table_name: 'documents', column_name: 'template_boilerplate_chunks' },
                     { table_name: 'documents', column_name: 'template_detection_mode' },
                     { table_name: 'documents', column_name: 'template_warnings' },
+                    { table_name: 'documents', column_name: 'ocr_rescue_applied' },
+                    { table_name: 'documents', column_name: 'ocr_rescue_engine' },
+                    { table_name: 'documents', column_name: 'ocr_rescue_fallback_engine' },
+                    { table_name: 'documents', column_name: 'ocr_rescue_chunks_recovered' },
+                    { table_name: 'documents', column_name: 'ocr_rescue_warnings' },
                 ],
             },
             {
@@ -70,6 +75,8 @@ describe('ingest schema health', () => {
         expect(result.missingColumns).toContain('chunks.highlight_text');
         expect(result.missingColumns).toContain('chunks.fts_vector');
         expect(result.missingColumns).toContain('documents.template_matched');
+        expect(result.missingColumns).toContain('documents.ocr_rescue_applied');
+        expect(result.missingColumns).toContain('documents.ocr_rescue_engine');
         expect(result.missingExtensions).toContain('vector');
     });
 

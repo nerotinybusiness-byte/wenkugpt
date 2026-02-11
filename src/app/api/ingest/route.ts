@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { processPipeline } from '@/lib/ingest/pipeline';
+import { resolveOcrEngine } from '@/lib/ingest/ocr-provider';
+import type { OcrEngine } from '@/lib/ingest/ocr';
 import { requireAdmin } from '@/lib/auth/request-auth';
 import { apiError, apiSuccess } from '@/lib/api/response';
 import { getRequestId, logError } from '@/lib/logger';
@@ -23,6 +25,8 @@ const IngestRequestSchema = z.object({
     accessLevel: z.enum(['public', 'private', 'team']).default('private'),
     skipEmbedding: z.boolean().default(false),
     templateProfileId: z.string().trim().min(1).max(128).optional(),
+    emptyChunkOcrEnabled: z.boolean().optional(),
+    emptyChunkOcrEngine: z.any().optional(),
 });
 
 function sanitizeFilename(name: string): string {
@@ -40,10 +44,12 @@ function resolveMimeType(file: File): string {
     return 'application/octet-stream';
 }
 
-function parseIngestOptions(formData: FormData): {
+export function parseIngestOptions(formData: FormData): {
     accessLevel: 'public' | 'private' | 'team';
     skipEmbedding: boolean;
     templateProfileId?: string;
+    emptyChunkOcrEnabled?: boolean;
+    emptyChunkOcrEngine: OcrEngine;
 } {
     const optionsRaw = formData.get('options');
 
@@ -51,7 +57,12 @@ function parseIngestOptions(formData: FormData): {
         try {
             const parsed = JSON.parse(optionsRaw);
             const validated = IngestRequestSchema.safeParse(parsed);
-            if (validated.success) return validated.data;
+            if (validated.success) {
+                return {
+                    ...validated.data,
+                    emptyChunkOcrEngine: resolveOcrEngine(validated.data.emptyChunkOcrEngine),
+                };
+            }
         } catch {
             // fallback below
         }
@@ -60,13 +71,26 @@ function parseIngestOptions(formData: FormData): {
     // Backward compatibility with direct multipart fields
     const legacyAccess = formData.get('accessLevel');
     const legacySkip = formData.get('skipEmbedding');
+    const legacyOcrEngine = formData.get('emptyChunkOcrEngine');
 
     const validated = IngestRequestSchema.safeParse({
         accessLevel: typeof legacyAccess === 'string' ? legacyAccess : undefined,
         skipEmbedding: typeof legacySkip === 'string' ? legacySkip === 'true' : undefined,
+        emptyChunkOcrEngine: typeof legacyOcrEngine === 'string' ? legacyOcrEngine : undefined,
     });
 
-    return validated.success ? validated.data : { accessLevel: 'private', skipEmbedding: false };
+    if (validated.success) {
+        return {
+            ...validated.data,
+            emptyChunkOcrEngine: resolveOcrEngine(validated.data.emptyChunkOcrEngine),
+        };
+    }
+
+    return {
+        accessLevel: 'private',
+        skipEmbedding: false,
+        emptyChunkOcrEngine: 'gemini',
+    };
 }
 
 function isPgColumnError(error: unknown): error is { code: string; message: string } {
@@ -169,6 +193,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             skipEmbedding: options.skipEmbedding,
             originalFilename: file.name,
             templateProfileId: options.templateProfileId,
+            emptyChunkOcrEnabled: options.emptyChunkOcrEnabled,
+            emptyChunkOcrEngine: options.emptyChunkOcrEngine,
         });
 
         return apiSuccess({
@@ -188,6 +214,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
                 detectionMode: result.template.detectionMode,
                 boilerplateChunks: result.template.boilerplateChunks,
                 warnings: result.template.warnings,
+            },
+            ocrRescue: {
+                enabled: result.ocrRescue.enabled,
+                attempted: result.ocrRescue.attempted,
+                applied: result.ocrRescue.applied,
+                engine: result.ocrRescue.engine,
+                fallbackEngine: result.ocrRescue.fallbackEngine,
+                engineUsed: result.ocrRescue.engineUsed,
+                chunksBefore: result.ocrRescue.chunksBefore,
+                chunksAfter: result.ocrRescue.chunksAfter,
+                pagesAttempted: result.ocrRescue.pagesAttempted,
+                warnings: result.ocrRescue.warnings,
             },
         });
     } catch (error) {
@@ -210,7 +248,7 @@ export async function GET(): Promise<NextResponse> {
                 body: 'multipart/form-data',
                 fields: {
                     file: 'PDF or TXT file (required)',
-                    options: 'JSON string with { accessLevel?: "public"|"private"|"team", skipEmbedding?: boolean, templateProfileId?: string }',
+                    options: 'JSON string with { accessLevel?: "public"|"private"|"team", skipEmbedding?: boolean, templateProfileId?: string, emptyChunkOcrEnabled?: boolean, emptyChunkOcrEngine?: "gemini"|"tesseract" }',
                 },
             },
         },

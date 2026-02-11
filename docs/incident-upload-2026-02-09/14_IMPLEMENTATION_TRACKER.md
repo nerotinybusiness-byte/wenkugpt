@@ -93,3 +93,14 @@ Fix missing `x-user-email` propagation in browser API requests.
 11. `done` Update docs/env (`README.md`, `docs/api.md`, `.env.example`).
 12. `done` Add tests for template module and schema-health updates; run full gates (`tsc`, `lint`, `lint:scripts`, `test:run`).
 13. `in_progress` Rollout execution: apply migration on target DB, generate tuned production profile(s), enable flags progressively (preview -> partial -> full).
+
+## OCR engine switch track (2026-02-11)
+1. `done` Add user-level OCR engine setting (`gemini`/`tesseract`) and persist migration (`v7`).
+2. `done` Add ingest UI selector + upload options wiring (`emptyChunkOcrEngine`).
+3. `done` Add OCR provider orchestrator with locked no-fallback policy.
+4. `done` Add Tesseract provider implementation (`tesseract.js`, `ces`, page cap 6, unavailable path).
+5. `done` Update ingestion pipeline diagnostics (`engine`, `fallbackEngine`, `engineUsed`) + telemetry payload.
+6. `done` Extend documents schema, DB migration (`0007`), and schema-health checks.
+7. `done` Extend ingest/documents API payload contracts and endpoint docs string.
+8. `done` Add unit/API/schema tests for provider routing, tesseract path, options sanitize, and metadata mapping.
+9. `done` Run full validation gates (`tsc`, `lint`, `test:run`, `build`) and record closure evidence.

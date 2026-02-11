@@ -1,15 +1,14 @@
 import { createHash } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { BoundingBox } from '@/lib/db/schema';
 import { devLog, logWarn } from '@/lib/logger';
 import type { SemanticChunk } from './chunker';
 import type { ParsedDocument, ParsedPage } from './parser';
+import { extractOcrTextForPdfPages, mapOcrFailureCode } from './ocr';
 
 const TEMPLATE_PROFILE_DIR = path.join(process.cwd(), 'config', 'template-profiles');
 const DEFAULT_MATCH_THRESHOLD = 0.72;
-const MAX_OCR_TIMEOUT_MS = 20_000;
 const MAX_SAMPLED_PAGES = 12;
 const MIN_SAMPLED_PAGES = 3;
 const SAMPLE_PERCENT = 0.10;
@@ -309,58 +308,6 @@ function computeOverlapRatio(a: BoundingBox, b: BoundingBox): number {
     return intersection / Math.min(areaA, areaB);
 }
 
-async function extractOcrTextForPages(
-    pdfBuffer: Buffer | Uint8Array,
-    pages: number[],
-): Promise<Map<number, string>> {
-    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    if (!apiKey) {
-        throw new Error('missing_google_api_key');
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-    const prompt = [
-        'You are an OCR assistant for PDF pages.',
-        `Return strict JSON only in this exact shape: {"pages":[{"page":1,"text":"..."},{"page":2,"text":"..."}]}.`,
-        `Extract text for these page numbers only: ${pages.join(', ')}.`,
-        'If a page has no readable text, return empty text.',
-        'Do not include markdown code fences.',
-    ].join('\n');
-
-    const pdfData = Buffer.from(pdfBuffer).toString('base64');
-    const call = model.generateContent([
-        { text: prompt },
-        { inlineData: { mimeType: 'application/pdf', data: pdfData } },
-    ]);
-
-    const result = await Promise.race([
-        call,
-        new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error('ocr_timeout')), MAX_OCR_TIMEOUT_MS);
-        }),
-    ]);
-
-    const rawText = result.response.text();
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-        throw new Error('ocr_parse_error');
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]) as {
-        pages?: Array<{ page?: number; text?: string }>;
-    };
-
-    const map = new Map<number, string>();
-    for (const row of parsed.pages ?? []) {
-        if (!Number.isInteger(row.page) || (row.page ?? 0) <= 0) continue;
-        map.set(row.page!, typeof row.text === 'string' ? row.text : '');
-    }
-
-    return map;
-}
-
 function resolveDetectionMode(evidence: PageEvidence[]): TemplateDetectionMode {
     const hasText = evidence.some((row) => row.hasTextLayer);
     const hasOcr = evidence.some((row) => row.hasOcrText);
@@ -392,9 +339,9 @@ async function buildPageEvidence(
     let ocrByPage = new Map<number, string>();
     if (needsOcrPages.length > 0 && useOcrFallback) {
         try {
-            ocrByPage = await extractOcrTextForPages(pdfBuffer, needsOcrPages);
+            ocrByPage = await extractOcrTextForPdfPages(pdfBuffer, needsOcrPages);
         } catch (error) {
-            const reason = error instanceof Error ? error.message : 'ocr_error';
+            const reason = mapOcrFailureCode(error);
             warnings.push(reason === 'ocr_timeout' ? 'ocr_timeout' : 'ocr_error');
             logWarn('Template OCR fallback failed', { route: 'ingest', stage: 'template-ocr' }, error);
         }
@@ -636,4 +583,3 @@ export async function detectTemplateForDocument(params: {
         boilerplateChunkIndexes,
     };
 }
-

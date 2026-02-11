@@ -49,6 +49,11 @@
 - Mitigation: gated by feature flag (`TEMPLATE_OCR_FALLBACK_ENABLED`), sampled-pages strategy (10% pages, min 3, max 12), timeout warning (`ocr_timeout`) and phased rollout.
 - Status: in progress.
 
+11. Tesseract runtime variability in OCR rescue (opened 2026-02-11)
+- Risk: `tesseract.js` warm-up/WASM startup and CPU-heavy page rendering may increase ingest latency variance across environments.
+- Mitigation: user-level opt-in engine switch, hard page cap for Tesseract rescue (`6` pages), warning-only behavior on provider failure (`ocr_rescue_tesseract_unavailable`, `ocr_rescue_timeout`), telemetry by engine.
+- Status: in progress.
+
 ## Open questions requiring decision
 1. What is canonical client-side identity source?
 - Option A: `NEXT_PUBLIC_DEFAULT_USER_EMAIL` (simple, static)
@@ -75,6 +80,9 @@
 
 8. Should boilerplate exclusion be enabled globally or scoped to selected projects/docs first?
 - Proposed default: staged enablement via `TEMPLATE_AWARE_FILTERING_ENABLED` (preview -> 10% -> 100%).
+
+9. Should `OCR_TESSERACT_ENABLED` stay enabled in all preview environments?
+- Proposed default: keep `true` where tested, disable selectively (`false`) in unstable/low-CPU previews while preserving warning-only upload behavior.
 
 ## Exit criteria for incident closure
 - Header propagation fixed and verified in browser.

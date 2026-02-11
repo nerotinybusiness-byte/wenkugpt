@@ -196,3 +196,35 @@ Use this file as append-only progress log.
 - New risk or blocker:
 - Next action:
 
+## 2026-02-11
+- Implemented OCR engine switch for empty/low chunk rescue with user-level setting (`gemini`/`tesseract`) and locked no-fallback policy.
+- Added ingest option + response contract fields:
+  - request: `emptyChunkOcrEngine`
+  - response: `ocrRescue.engine`, `ocrRescue.fallbackEngine`, `ocrRescue.engineUsed`
+- Added documents metadata fields:
+  - `ocrRescueEngine`, `ocrRescueFallbackEngine`
+- Added DB migration for OCR engine metadata:
+  - `drizzle/0007_ocr_engine_switch.sql`
+- Added provider abstraction and Tesseract backend path:
+  - `src/lib/ingest/ocr-provider.ts`
+  - `src/lib/ingest/ocr-tesseract.ts`
+  - `src/lib/ingest/ocr.ts` (Gemini provider export + unified failure mapping)
+- Pipeline wiring updated for engine-aware rescue + telemetry payload keys:
+  - `ingest_ocr_engine_usage`
+  - `ingest_ocr_engine_fallback_rate`
+  - `ingest_ocr_rescue_success_rate_by_engine`
+  - `ingest_ocr_latency_ms`
+  - `ingest_ocr_warning_codes`
+- Added/expanded test coverage:
+  - `ocr-provider.test.ts`
+  - `ocr-tesseract.test.ts`
+  - ingest route options/get tests
+  - documents pagination test
+  - schema-health test
+- Validation gates completed after OCR engine switch implementation:
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run test:run` passed (`75/75`).
+  - `npm run build` passed.
+- Current status: OCR engine switch changes are implemented and locally validated; migration `0007` rollout on target DB remains.
+

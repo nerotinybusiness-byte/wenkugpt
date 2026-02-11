@@ -16,6 +16,11 @@ const REQUIRED_TABLE_COLUMNS = {
         'template_boilerplate_chunks',
         'template_detection_mode',
         'template_warnings',
+        'ocr_rescue_applied',
+        'ocr_rescue_engine',
+        'ocr_rescue_fallback_engine',
+        'ocr_rescue_chunks_recovered',
+        'ocr_rescue_warnings',
     ],
 } as const;
 

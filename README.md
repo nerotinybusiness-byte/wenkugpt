@@ -39,6 +39,17 @@ Optional template-ingest flags:
 - `TEMPLATE_AWARE_FILTERING_ENABLED` (`true` to enable template matching + boilerplate exclusion)
 - `TEMPLATE_OCR_FALLBACK_ENABLED` (`true` to allow Gemini OCR fallback for low-text PDF pages)
 
+Optional OCR rescue flags:
+- `OCR_TESSERACT_ENABLED` (`true` by default; set `false` to force Tesseract engine unavailable while keeping uploads warning-only)
+
+OCR rescue for low/empty PDF chunk outcomes is controlled per user in the Settings dialog
+(`OCR rescue for empty/low PDF chunks`) and defaults to `OFF`.
+When enabled, user can choose OCR engine in Settings:
+- `gemini` (default, recommended)
+- `tesseract` (lower quality, no fallback to Gemini in rescue path)
+
+OCR rescue remains warning-only (it does not block document upload).
+
 ## Local Auth Header (current stage)
 Until full OAuth session wiring is finished, API auth expects:
 - `x-user-email: user@example.com`

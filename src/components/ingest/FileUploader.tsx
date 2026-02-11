@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { Upload, FileText, Loader2, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/lib/api/client-request';
+import { getSettings } from '@/lib/settings/store';
 
 interface FileUploaderProps {
     onUploadComplete?: () => void;
@@ -22,6 +23,19 @@ interface TemplateUploadDiagnostics {
     matchScore: number | null;
     detectionMode: 'text' | 'ocr' | 'hybrid' | 'none';
     boilerplateChunks: number;
+    warnings: string[];
+}
+
+interface OcrRescueDiagnostics {
+    enabled: boolean;
+    attempted: boolean;
+    applied: boolean;
+    engine: 'gemini' | 'tesseract' | null;
+    fallbackEngine: 'gemini' | 'tesseract' | null;
+    engineUsed: 'gemini' | 'tesseract' | null;
+    chunksBefore: number;
+    chunksAfter: number;
+    pagesAttempted: number;
     warnings: string[];
 }
 
@@ -136,9 +150,12 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
 
         const formData = new FormData();
         formData.append('file', fileWrapper.file);
+        const settings = getSettings();
         formData.append('options', JSON.stringify({
             accessLevel: 'private',
             skipEmbedding: false,
+            emptyChunkOcrEnabled: settings.emptyChunkOcrEnabled,
+            emptyChunkOcrEngine: settings.emptyChunkOcrEngine,
         }));
 
         try {
@@ -147,11 +164,19 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
                 body: formData,
             });
             const raw = await response.text();
-            let payload: ApiResponse<{ documentId: string; template?: TemplateUploadDiagnostics }> | null = null;
+            let payload: ApiResponse<{
+                documentId: string;
+                template?: TemplateUploadDiagnostics;
+                ocrRescue?: OcrRescueDiagnostics;
+            }> | null = null;
 
             if (raw) {
                 try {
-                    payload = JSON.parse(raw) as ApiResponse<{ documentId: string; template?: TemplateUploadDiagnostics }>;
+                    payload = JSON.parse(raw) as ApiResponse<{
+                        documentId: string;
+                        template?: TemplateUploadDiagnostics;
+                        ocrRescue?: OcrRescueDiagnostics;
+                    }>;
                 } catch {
                     payload = null;
                 }
@@ -166,11 +191,20 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
 
             const templateDiagnostics = payload.data.template;
             const templateWarnings = templateDiagnostics?.warnings || [];
+            const ocrRescueDiagnostics = payload.data.ocrRescue;
+            const ocrWarnings = ocrRescueDiagnostics?.warnings || [];
+            const ocrInfo = ocrRescueDiagnostics?.attempted
+                ? `OCR rescue: ${ocrRescueDiagnostics.applied
+                    ? `recovered ${Math.max(0, ocrRescueDiagnostics.chunksAfter - ocrRescueDiagnostics.chunksBefore)} chunks`
+                    : `no gain${ocrWarnings.length > 0 ? ` (${ocrWarnings.join(', ')})` : ''}`}${ocrRescueDiagnostics.engineUsed ? ` via ${ocrRescueDiagnostics.engineUsed}` : ''}`
+                : null;
             const successMessage = templateWarnings.length > 0
                 ? `Complete (template warnings: ${templateWarnings.join(', ')})`
                 : templateDiagnostics?.matched
                     ? `Complete (template: ${templateDiagnostics.profileId || 'matched'}, filtered ${templateDiagnostics.boilerplateChunks})`
-                    : 'Complete';
+                    : ocrInfo
+                        ? `Complete (${ocrInfo})`
+                        : 'Complete';
 
             setFiles((prev) => prev.map((f) => (f.id === fileWrapper.id ? { ...f, status: 'success', message: successMessage } : f)));
             if (onUploadComplete) onUploadComplete();

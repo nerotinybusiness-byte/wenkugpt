@@ -31,6 +31,11 @@ interface DocumentItem {
     templateBoilerplateChunks?: number;
     templateDetectionMode?: string | null;
     templateWarnings?: string[] | null;
+    ocrRescueApplied?: boolean;
+    ocrRescueEngine?: string | null;
+    ocrRescueFallbackEngine?: string | null;
+    ocrRescueChunksRecovered?: number;
+    ocrRescueWarnings?: string[] | null;
     createdAt: string;
 }
 
@@ -306,9 +311,18 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                     const warningInfo = Array.isArray(doc.templateWarnings) && doc.templateWarnings.length > 0
                         ? `Template warnings: ${doc.templateWarnings.join(', ')}`
                         : null;
+                    const ocrInfo = doc.ocrRescueApplied
+                        ? `OCR rescue recovered ${doc.ocrRescueChunksRecovered || 0} chunks`
+                        : null;
+                    const ocrEngineInfo = doc.ocrRescueEngine
+                        ? `OCR engine: ${doc.ocrRescueEngine}${doc.ocrRescueFallbackEngine ? ` (fallback: ${doc.ocrRescueFallbackEngine})` : ''}`
+                        : null;
+                    const ocrWarningInfo = Array.isArray(doc.ocrRescueWarnings) && doc.ocrRescueWarnings.length > 0
+                        ? `OCR warnings: ${doc.ocrRescueWarnings.join(', ')}`
+                        : null;
                     const statusInfo = doc.processingStatus === 'failed' && doc.processingError
                         ? doc.processingError
-                        : warningInfo;
+                        : warningInfo || ocrWarningInfo;
 
                     return (
                         <div
@@ -359,6 +373,12 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                                     </div>
                                     {templateInfo && (
                                         <p className="text-[11px] text-emerald-300/80 truncate">{templateInfo}</p>
+                                    )}
+                                    {ocrInfo && (
+                                        <p className="text-[11px] text-cyan-300/80 truncate">{ocrInfo}</p>
+                                    )}
+                                    {ocrEngineInfo && (
+                                        <p className="text-[11px] text-cyan-300/80 truncate">{ocrEngineInfo}</p>
                                     )}
                                     {statusInfo && (
                                         <p className={`text-[11px] truncate ${doc.processingStatus === 'failed'

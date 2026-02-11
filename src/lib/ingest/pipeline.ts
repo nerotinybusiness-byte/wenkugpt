@@ -7,6 +7,13 @@ import { parseDocument, ParsedDocument } from './parser';
 import { chunkDocument, SemanticChunk, DEFAULT_CHUNKER_CONFIG } from './chunker';
 import { embedTexts, isEmbedderConfigured, DEFAULT_EMBEDDER_CONFIG } from './embedder';
 import { detectTemplateForDocument, type TemplateDiagnostics } from './template';
+import { runOcrRescueProvider, resolveOcrEngine } from './ocr-provider';
+import type { OcrEngine } from './ocr';
+import {
+    mergeOcrTextIntoPages,
+    resolveOcrCandidatePages,
+    shouldTriggerOcrRescue,
+} from './ocr-rescue';
 import { logResidencyStatus } from '@/lib/config/regions';
 import CryptoJS from 'crypto-js';
 import fs from 'fs/promises';
@@ -29,6 +36,8 @@ export interface PipelineResult {
     chunks: SemanticChunk[];
     /** Template diagnostics used for filtering and warnings */
     template: TemplateDiagnostics;
+    /** OCR rescue diagnostics for empty/low chunk PDF ingests */
+    ocrRescue: OcrRescueDiagnostics;
     /** Processing statistics */
     stats: {
         parseTimeMs: number;
@@ -45,6 +54,19 @@ export interface PipelineResult {
         indexableChunkCount: number;
         boilerplateChunkCount: number;
     };
+}
+
+export interface OcrRescueDiagnostics {
+    enabled: boolean;
+    attempted: boolean;
+    applied: boolean;
+    engine: OcrEngine | null;
+    fallbackEngine: OcrEngine | null;
+    engineUsed: OcrEngine | null;
+    chunksBefore: number;
+    chunksAfter: number;
+    pagesAttempted: number;
+    warnings: string[];
 }
 
 /**
@@ -174,6 +196,7 @@ function buildHighlightText(chunk: SemanticChunk): string | null {
     return snippet || null;
 }
 
+
 /**
  * Process a document through the full ingestion pipeline
  *
@@ -194,6 +217,8 @@ export async function processPipeline(
         skipStorage?: boolean;
         originalFilename?: string;
         templateProfileId?: string;
+        emptyChunkOcrEnabled?: boolean;
+        emptyChunkOcrEngine?: OcrEngine;
     } = {},
 ): Promise<PipelineResult> {
     const startTime = performance.now();
@@ -237,12 +262,91 @@ export async function processPipeline(
     devLog('\nStep 2: Semantic chunking...');
     const chunkStart = performance.now();
 
-    const chunks = chunkDocument(document.pages, DEFAULT_CHUNKER_CONFIG);
+    let workingPages = document.pages;
+    let chunks = chunkDocument(workingPages, DEFAULT_CHUNKER_CONFIG);
+    const selectedOcrEngine = resolveOcrEngine(options.emptyChunkOcrEngine);
+    const ocrRescue: OcrRescueDiagnostics = {
+        enabled: options.emptyChunkOcrEnabled === true,
+        attempted: false,
+        applied: false,
+        engine: options.emptyChunkOcrEnabled === true ? selectedOcrEngine : null,
+        fallbackEngine: null,
+        engineUsed: null,
+        chunksBefore: chunks.length,
+        chunksAfter: chunks.length,
+        pagesAttempted: 0,
+        warnings: [],
+    };
 
+    devLog(`   Initial chunks: ${chunks.length}`);
+
+    const shouldEvaluateOcrRescue = shouldTriggerOcrRescue(mimeType, chunks.length);
+
+    if (shouldEvaluateOcrRescue) {
+        if (!ocrRescue.enabled) {
+            ocrRescue.warnings.push('ocr_rescue_disabled');
+        } else {
+            const candidatePages = resolveOcrCandidatePages(workingPages);
+            if (candidatePages.length === 0) {
+                ocrRescue.warnings.push('ocr_rescue_no_text_extracted');
+            } else {
+                ocrRescue.attempted = true;
+                const providerResult = await runOcrRescueProvider({
+                    pdfBuffer: buffer,
+                    pages: candidatePages,
+                    engine: selectedOcrEngine,
+                });
+                ocrRescue.pagesAttempted = providerResult.pagesProcessed;
+                ocrRescue.engineUsed = providerResult.engineUsed;
+                ocrRescue.fallbackEngine = providerResult.fallbackEngine;
+                if (providerResult.warnings.length > 0) {
+                    ocrRescue.warnings.push(...providerResult.warnings);
+                }
+
+                const extractedCount = [...providerResult.ocrByPage.values()]
+                    .map((text) => text.trim())
+                    .filter((text) => text.length > 0)
+                    .length;
+
+                if (extractedCount === 0) {
+                    if (!ocrRescue.warnings.includes('ocr_rescue_no_text_extracted')) {
+                        ocrRescue.warnings.push('ocr_rescue_no_text_extracted');
+                    }
+                } else {
+                    workingPages = mergeOcrTextIntoPages(workingPages, providerResult.ocrByPage);
+                    const rescuedChunks = chunkDocument(workingPages, DEFAULT_CHUNKER_CONFIG);
+                    ocrRescue.chunksAfter = rescuedChunks.length;
+                    ocrRescue.applied = rescuedChunks.length > ocrRescue.chunksBefore;
+                    if (ocrRescue.applied) {
+                        chunks = rescuedChunks;
+                    } else {
+                        ocrRescue.warnings.push('ocr_rescue_no_chunk_gain');
+                    }
+                }
+
+                logInfo('OCR rescue telemetry', {
+                    route: 'ingest',
+                    stage: 'ocr-rescue',
+                    ingest_ocr_engine_usage: providerResult.engineUsed ?? providerResult.engine,
+                    ingest_ocr_engine_fallback_rate: providerResult.fallbackEngine ? 1 : 0,
+                    ingest_ocr_rescue_success_rate_by_engine: ocrRescue.applied ? 1 : 0,
+                    ingest_ocr_latency_ms: Math.round(providerResult.latencyMs),
+                    ingest_ocr_warning_codes: ocrRescue.warnings,
+                });
+            }
+        }
+    }
+
+    ocrRescue.chunksAfter = chunks.length;
     const chunkTimeMs = performance.now() - chunkStart;
     const totalTokens = chunks.reduce((sum, chunk) => sum + chunk.tokenCount, 0);
 
-    devLog(`   Created ${chunks.length} semantic chunks in ${chunkTimeMs.toFixed(0)}ms`);
+    devLog(`   Final chunks: ${chunks.length} in ${chunkTimeMs.toFixed(0)}ms`);
+    if (ocrRescue.attempted) {
+        devLog(`   OCR rescue attempted on ${ocrRescue.pagesAttempted} page(s), applied=${ocrRescue.applied}`);
+    } else if (ocrRescue.warnings.length > 0) {
+        devLog(`   OCR rescue warnings: ${ocrRescue.warnings.join(', ')}`);
+    }
     devLog(`   Total tokens: ~${totalTokens}`);
 
     // =========================================================================
@@ -252,7 +356,10 @@ export async function processPipeline(
     const templateResult = await detectTemplateForDocument({
         buffer,
         mimeType,
-        document,
+        document: {
+            ...document,
+            pages: workingPages,
+        },
         chunks,
         templateProfileId: options.templateProfileId,
     });
@@ -360,6 +467,13 @@ export async function processPipeline(
                     templateWarnings: templateResult.diagnostics.warnings.length > 0
                         ? templateResult.diagnostics.warnings
                         : null,
+                    ocrRescueApplied: ocrRescue.applied,
+                    ocrRescueEngine: ocrRescue.engine,
+                    ocrRescueFallbackEngine: ocrRescue.fallbackEngine,
+                    ocrRescueChunksRecovered: Math.max(0, ocrRescue.chunksAfter - ocrRescue.chunksBefore),
+                    ocrRescueWarnings: ocrRescue.warnings.length > 0
+                        ? ocrRescue.warnings
+                        : null,
                 }).returning();
 
                 documentId = doc.id;
@@ -414,6 +528,13 @@ export async function processPipeline(
                         templateWarnings: templateResult.diagnostics.warnings.length > 0
                             ? templateResult.diagnostics.warnings
                             : null,
+                        ocrRescueApplied: ocrRescue.applied,
+                        ocrRescueEngine: ocrRescue.engine,
+                        ocrRescueFallbackEngine: ocrRescue.fallbackEngine,
+                        ocrRescueChunksRecovered: Math.max(0, ocrRescue.chunksAfter - ocrRescue.chunksBefore),
+                        ocrRescueWarnings: ocrRescue.warnings.length > 0
+                            ? ocrRescue.warnings
+                            : null,
                         updatedAt: new Date(),
                     })
                     .where(eq(documents.id, doc.id));
@@ -459,6 +580,7 @@ export async function processPipeline(
     devLog(`   Chunks:        ${chunks.length}`);
     devLog(`   Indexable:     ${indexedChunkEntries.length}`);
     devLog(`   Boilerplate:   ${boilerplateChunkIndexes.size}`);
+    devLog(`   OCR rescue:    ${ocrRescue.attempted ? `${ocrRescue.chunksBefore} -> ${ocrRescue.chunksAfter}` : 'not attempted'}`);
     devLog(`   Total tokens:  ~${totalTokens}`);
     devLog('   -----------------------------');
     devLog(`   Parse time:    ${parseTimeMs.toFixed(0)}ms`);
@@ -472,9 +594,13 @@ export async function processPipeline(
 
     return {
         documentId,
-        document,
+        document: {
+            ...document,
+            pages: workingPages,
+        },
         chunks,
         template: templateResult.diagnostics,
+        ocrRescue,
         stats: {
             parseTimeMs,
             chunkTimeMs,

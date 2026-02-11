@@ -118,6 +118,11 @@ export const documents = pgTable('documents', {
   templateBoilerplateChunks: integer('template_boilerplate_chunks').default(0).notNull(),
   templateDetectionMode: varchar('template_detection_mode', { length: 32 }),
   templateWarnings: jsonb('template_warnings').$type<string[]>(),
+  ocrRescueApplied: boolean('ocr_rescue_applied').default(false).notNull(),
+  ocrRescueEngine: varchar('ocr_rescue_engine', { length: 32 }),
+  ocrRescueFallbackEngine: varchar('ocr_rescue_fallback_engine', { length: 32 }),
+  ocrRescueChunksRecovered: integer('ocr_rescue_chunks_recovered').default(0).notNull(),
+  ocrRescueWarnings: jsonb('ocr_rescue_warnings').$type<string[]>(),
 
   // Timestamps
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
