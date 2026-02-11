@@ -96,6 +96,7 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
     const [files, setFiles] = useState<FileWithStatus[]>([]);
     const [folderName, setFolderName] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const fileListMaxHeight = 'min(40vh, 19rem)';
 
     const addFiles = useCallback((newFiles: File[]) => {
         setFiles((prev) => {
@@ -265,7 +266,7 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
     const pendingCount = files.filter((f) => f.status === 'pending' || f.status === 'error').length;
 
     return (
-        <div className="w-full space-y-4">
+        <div className="w-full min-h-0 space-y-4">
             <div
                 className={`
                     relative overflow-hidden rounded-2xl border-2 border-dashed transition-all duration-300
@@ -322,7 +323,10 @@ export default function FileUploader({ onUploadComplete }: FileUploaderProps) {
             </div>
 
             {files.length > 0 && (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
+                <div
+                    className="space-y-2 overflow-y-auto overscroll-contain custom-scrollbar pr-2 [scrollbar-gutter:stable]"
+                    style={{ maxHeight: fileListMaxHeight }}
+                >
                     {files.map((wrap) => (
                         <div key={wrap.id} className={`rounded-lg p-3 flex items-center gap-3 border ${isDark ? 'bg-white/5 border-white/10' : 'bg-black/[0.03] border-black/10'}`}>
                             <FileText

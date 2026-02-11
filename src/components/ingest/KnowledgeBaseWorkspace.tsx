@@ -27,8 +27,8 @@ export default function KnowledgeBaseWorkspace({
 
     return (
         <div className={cn(`flex-1 h-full min-h-0 grid md:grid-cols-[1fr_1.5fr] gap-0 ${isDark ? 'divide-x divide-white/10' : 'divide-x divide-black/10'}`, className)}>
-            <div className={cn(`min-h-0 p-8 ${isDark ? 'bg-white/[0.02]' : 'bg-black/[0.015]'}`, leftPaneClassName)}>
-                <div className="max-w-md mx-auto space-y-8">
+            <div className={cn(`min-h-0 overflow-y-auto overscroll-contain custom-scrollbar-wide p-8 ${isDark ? 'bg-white/[0.02]' : 'bg-black/[0.015]'}`, leftPaneClassName)}>
+                <div className="max-w-md mx-auto space-y-8 pb-2">
                     <div>
                         <h2 className="text-lg font-medium mb-2">Upload Documents</h2>
                         <p className={`text-sm ${isDark ? 'text-white/50' : 'text-zinc-600'}`}>
