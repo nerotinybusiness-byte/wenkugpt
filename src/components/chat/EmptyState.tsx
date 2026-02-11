@@ -56,7 +56,7 @@ export default function EmptyState({ onSuggestionSelect }: EmptyStateProps) {
             </div>
 
             <div className="grid w-full max-w-4xl grid-cols-1 gap-4 md:grid-cols-2">
-                {suggestions.map((suggestion) => {
+                {suggestions.map((suggestion, index) => {
                     const SuggestionIcon = iconMap[suggestion.icon] ?? Lightbulb;
 
                     return (
@@ -64,7 +64,8 @@ export default function EmptyState({ onSuggestionSelect }: EmptyStateProps) {
                             key={suggestion.title}
                             type="button"
                             onClick={() => onSuggestionSelect?.(suggestion.prompt)}
-                            className="liquid-glass w-full rounded-[24px] p-5 text-left transition-colors duration-200 hover:text-[var(--c-action)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-action)]/60"
+                            className="liquid-glass suggestion-card-pop w-full rounded-[24px] p-5 text-left transition-colors duration-200 hover:text-[var(--c-action)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-action)]/60"
+                            style={{ animationDelay: `${index * 90}ms` }}
                         >
                             <div className="flex items-start gap-4">
                                 <SuggestionIcon className="mt-0.5 h-6 w-6 text-[var(--c-action)]" strokeWidth={1.8} />
