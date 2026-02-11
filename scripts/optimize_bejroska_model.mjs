@@ -30,7 +30,7 @@ async function optimizeModel() {
         '--compress',
         'draco',
         '--texture-compress',
-        'webp',
+        'false',
         '--texture-size',
         '1024',
         '--simplify-ratio',

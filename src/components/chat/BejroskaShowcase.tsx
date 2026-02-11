@@ -4,7 +4,7 @@ import { Sparkles } from 'lucide-react';
 import { type ElementType, useEffect, useState } from 'react';
 
 const ModelViewerTag = 'model-viewer' as unknown as ElementType;
-const BEJROSKA_MODEL_SRC = '/models/bejroska-hoodie.glb?v=2026-02-11-compressed-4';
+const BEJROSKA_MODEL_SRC = '/models/bejroska-hoodie.glb?v=2026-02-11-compressed-5';
 const DRACO_DECODER_LOCATION = '/model-viewer/draco/';
 const KTX2_TRANSCODER_LOCATION = '/model-viewer/basis/';
 const MODEL_LOAD_TIMEOUT_MS = 20000;
@@ -76,9 +76,33 @@ export default function BejroskaShowcase() {
     }, [phase, viewerMountKey]);
 
     useEffect(() => {
-        if (!errorReason) return;
-        console.warn('[BejroskaShowcase] 3D load issue', { reason: errorReason, src: BEJROSKA_MODEL_SRC });
-    }, [errorReason]);
+        if (typeof window === 'undefined') return;
+        if (phase !== 'loading') return;
+
+        const viewer = document.querySelector(`[data-bejroska-viewer="${viewerMountKey}"]`) as
+            | (HTMLElement & { loaded?: boolean })
+            | null;
+        if (!viewer) return;
+
+        if (viewer.loaded) {
+            setErrorReason(null);
+            setPhase('ready');
+            return;
+        }
+
+        const handleProgress = (event: Event) => {
+            const detail = (event as CustomEvent<{ totalProgress?: number }>).detail;
+            if (typeof detail?.totalProgress === 'number' && detail.totalProgress >= 1) {
+                setErrorReason(null);
+                setPhase('ready');
+            }
+        };
+
+        viewer.addEventListener('progress', handleProgress as EventListener);
+        return () => {
+            viewer.removeEventListener('progress', handleProgress as EventListener);
+        };
+    }, [phase, viewerMountKey]);
 
     const shouldRenderViewer = phase !== 'booting' && errorReason !== 'import_failed';
     const showErrorOverlay = phase === 'error';
@@ -107,6 +131,7 @@ export default function BejroskaShowcase() {
             {shouldRenderViewer ? (
                 <ModelViewerTag
                     key={`${BEJROSKA_MODEL_SRC}-${viewerMountKey}`}
+                    data-bejroska-viewer={viewerMountKey}
                     src={BEJROSKA_MODEL_SRC}
                     alt="Bejroska hoodie"
                     camera-controls
