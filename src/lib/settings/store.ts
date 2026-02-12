@@ -162,7 +162,7 @@ export interface SettingsState {
  * Default settings values.
  */
 const DEFAULT_SETTINGS = {
-    ragEngine: 'v1' as RAGEngineId,
+    ragEngine: 'v2' as RAGEngineId,
     contextScope: {
         team: '',
         product: '',

@@ -15,12 +15,12 @@ export const CHAT_SUGGESTION_POOL: SuggestionPoolItem[] = [
     {
         icon: 'brand_wenku_wave_circle',
         title: 'Shrn hlavni body Wenku',
-        subtitle: 'Rychly prehled z nahranych dokumentu',
-        prompt: 'Shrn hlavni body z dokumentu Wenku do 5 strucnych odrazek.',
+        subtitle: 'Rychly prehled z nahranych písniček',
+        prompt: 'pošli mi wenkuplaylist',
     },
     {
         icon: 'brand_wenku_w',
-        title: 'Najdi dulezite informace',
+        title: 'Wenku Playlist do auta',
         subtitle: 'Klicova data a terminy na jednom miste',
         prompt: 'Najdi v dokumentech vsechny dulezite terminy, data a odpovedne osoby.',
     },

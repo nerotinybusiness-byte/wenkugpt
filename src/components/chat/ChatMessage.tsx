@@ -84,6 +84,7 @@ interface ChatMessageProps {
         role: 'user' | 'assistant';
         sources?: Source[];
         isLoading?: boolean;
+        degraded?: boolean;
     };
     onRegenerate?: () => void;
     onCitationClick?: (citation: CitationPayload) => void;
@@ -179,6 +180,12 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
                         }
                     `}
                 >
+                    {!isUser && message.degraded && (
+                        <div className="mb-2 inline-flex rounded-md border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-[11px] font-medium text-amber-200">
+                            dočasný fallback
+                        </div>
+                    )}
+
                     {parsedContent}
 
                     {/* Citations/Sources Footer */}

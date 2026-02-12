@@ -54,6 +54,7 @@ interface Message {
     verified?: boolean;
     confidence?: number;
     isLoading?: boolean;
+    degraded?: boolean;
 }
 
 interface ChatPanelProps {
@@ -85,7 +86,13 @@ interface ApiError {
     data: null;
     error?: string;
     code?: string;
-    details?: string;
+    details?: {
+        requestId?: string;
+        retryable?: boolean;
+        errorCode?: string;
+        stage?: string;
+        [key: string]: unknown;
+    } | string;
 }
 
 type ApiResponse<T> = ApiSuccess<T> | ApiError;
@@ -96,6 +103,9 @@ interface ChatPostResponseData {
     sources: Source[];
     verified: boolean;
     confidence: number;
+    requestId?: string;
+    degraded?: boolean;
+    errorCode?: string;
     stats?: SettingsState['lastStats'];
     interpretation?: {
         detectedTerms: string[];
@@ -118,6 +128,37 @@ interface ChatPostResponseData {
         engine: 'v1' | 'v2';
         mode: 'compat' | 'graph';
     };
+}
+
+const CHAT_CLIENT_MAX_ATTEMPTS = 2;
+const CHAT_CLIENT_RETRY_DELAY_MS = 400;
+const FRIENDLY_CHAT_ERROR_CS = 'Dočasný výpadek odpovědi. Zkus to prosím znovu.';
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableApiFailure(code?: string, status?: number): boolean {
+    return status === 503 || code === 'CHAT_UPSTREAM_TRANSIENT' || code === 'CHAT_DB_TRANSIENT';
+}
+
+function isRetryableNetworkError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const message = `${error.name} ${error.message}`.toLowerCase();
+    return (
+        message.includes('network')
+        || message.includes('fetch')
+        || message.includes('timeout')
+        || message.includes('econnreset')
+        || message.includes('etimedout')
+    );
+}
+
+function extractRequestIdFromErrorPayload(payload: ApiError, response: Response): string | undefined {
+    const headerRequestId = response.headers.get('x-request-id') || undefined;
+    if (headerRequestId) return headerRequestId;
+    if (typeof payload.details === 'string') return undefined;
+    return payload.details?.requestId;
 }
 
 export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPanelProps) {
@@ -299,26 +340,68 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                 confidenceThreshold: settings.confidenceThreshold,
             };
 
-            const response = await apiFetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    query,
-                    settings: settingsPayload,
-                    chatId: currentChatId,
-                }),
-                signal: abortControllerRef.current?.signal,
-            });
+            let data: ChatPostResponseData | null = null;
 
+            for (let attempt = 1; attempt <= CHAT_CLIENT_MAX_ATTEMPTS; attempt += 1) {
+                try {
+                    const response = await apiFetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            query,
+                            settings: settingsPayload,
+                            chatId: currentChatId,
+                        }),
+                        signal: abortControllerRef.current?.signal,
+                    });
 
-            const payload = await response.json() as ApiResponse<ChatPostResponseData>;
+                    const payload = await response.json() as ApiResponse<ChatPostResponseData>;
 
-            if (!payload.success) {
-                console.error('Chat API Error Details:', payload.details);
-                throw new Error(payload.error || 'Failed to get response');
+                    if (!payload.success) {
+                        const requestId = extractRequestIdFromErrorPayload(payload, response);
+                        const retryable = isRetryableApiFailure(payload.code, response.status);
+
+                        console.error('Chat API error', {
+                            code: payload.code,
+                            status: response.status,
+                            requestId,
+                            details: payload.details,
+                        });
+
+                        const canRetry = retryable && attempt < CHAT_CLIENT_MAX_ATTEMPTS;
+                        if (canRetry) {
+                            await delay(CHAT_CLIENT_RETRY_DELAY_MS);
+                            continue;
+                        }
+
+                        const apiError = new Error(FRIENDLY_CHAT_ERROR_CS) as Error & { requestId?: string };
+                        apiError.requestId = requestId;
+                        throw apiError;
+                    }
+
+                    data = payload.data;
+                    break;
+                } catch (requestError) {
+                    const isAbortError = requestError instanceof Error && requestError.name === 'AbortError';
+                    if (isAbortError) throw requestError;
+
+                    const canRetryNetwork = (
+                        attempt < CHAT_CLIENT_MAX_ATTEMPTS
+                        && isRetryableNetworkError(requestError)
+                    );
+
+                    if (canRetryNetwork) {
+                        await delay(CHAT_CLIENT_RETRY_DELAY_MS);
+                        continue;
+                    }
+
+                    throw requestError;
+                }
             }
 
-            const data = payload.data;
+            if (!data) {
+                throw new Error(FRIENDLY_CHAT_ERROR_CS);
+            }
 
             // Update Chat ID if new session started
             if (data.chatId && data.chatId !== currentChatId) {
@@ -339,6 +422,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                     sources: data.sources,
                     verified: data.verified,
                     confidence: data.confidence,
+                    degraded: data.degraded === true,
                 });
 
                 // Update usage stats in store
@@ -350,6 +434,9 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
             });
 
             if (data.sources && onSourcesChange) onSourcesChange(data.sources);
+            if (data.requestId) {
+                console.info('Chat response requestId', data.requestId);
+            }
 
 
         } catch (error: unknown) {
@@ -370,14 +457,21 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                     return newMessages;
                 });
             } else {
-                console.error('Chat error:', error);
-                const errorMessage = error instanceof Error ? error.message : 'Nezn\u00E1m\u00E1 chyba';
+                const requestId = (
+                    error instanceof Error
+                    && 'requestId' in error
+                    && typeof (error as Error & { requestId?: unknown }).requestId === 'string'
+                )
+                    ? ((error as Error & { requestId?: string }).requestId)
+                    : undefined;
+
+                console.error('Chat error:', { error, requestId });
                 setMessages(prev => {
                     const newMessages = [...prev];
                     newMessages.pop(); // Remove loading
                     newMessages.push({
                         id: `error-${Date.now()}`,
-                        content: `Do\u0161lo k chyb\u011B: ${errorMessage}`,
+                        content: FRIENDLY_CHAT_ERROR_CS,
                         isUser: false,
                     });
                     return newMessages;
@@ -613,7 +707,8 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                                         content: message.content,
                                         role: message.isUser ? 'user' : 'assistant',
                                         sources: message.sources,
-                                        isLoading: message.isLoading
+                                        isLoading: message.isLoading,
+                                        degraded: message.degraded,
                                     }}
                                     onCitationClick={onCitationSelect}
                                     onRegenerate={!message.isUser ? () => handleRegenerate(message.id) : undefined}

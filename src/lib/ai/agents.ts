@@ -92,7 +92,7 @@ export interface RAGResponse {
 }
 
 export type RAGEngineId = 'v1' | 'v2';
-const DEFAULT_RAG_ENGINE: RAGEngineId = 'v1';
+const DEFAULT_RAG_ENGINE: RAGEngineId = 'v2';
 
 /**
  * Configuration for RAG pipeline
@@ -618,7 +618,7 @@ async function executeRAGCore(
 }
 
 function normalizeRagConfig(config: Partial<RAGConfig>): RAGConfig {
-    const ragEngine: RAGEngineId = config.ragEngine === 'v2' ? 'v2' : 'v1';
+    const ragEngine: RAGEngineId = config.ragEngine === 'v1' ? 'v1' : 'v2';
     const ambiguityPolicy: AmbiguityPolicy = config.ambiguityPolicy === 'ask'
         || config.ambiguityPolicy === 'strict'
         || config.ambiguityPolicy === 'show_both'

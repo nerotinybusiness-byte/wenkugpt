@@ -18,6 +18,7 @@
     "template:build-profile": "npx tsx scripts/build_template_profile.ts",
     "model:optimize:bejroska": "node scripts/optimize_bejroska_model.mjs",
     "model:build:bejroska-png": "node scripts/build_bejroska_png_models.mjs",
+    "smoke:chat-load": "node scripts/smoke_chat_load.mjs",
     "test": "vitest",
     "test:run": "vitest run"
   },
