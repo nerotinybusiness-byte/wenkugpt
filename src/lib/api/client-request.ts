@@ -39,8 +39,9 @@ function isApiTarget(input: RequestInfo | URL): boolean {
         if (input.startsWith('http://') || input.startsWith('https://')) {
             try {
                 return new URL(input).pathname.startsWith('/api/');
-            } catch {
-                return false;
+            } catch (err) {
+                console.warn('[isApiTarget] Failed to parse URL, defaulting to true:', input, err);
+                return true;
             }
         }
         return false;
@@ -50,7 +51,12 @@ function isApiTarget(input: RequestInfo | URL): boolean {
         return input.pathname.startsWith('/api/');
     }
 
-    return input.url.includes('/api/');
+    try {
+        return new URL(input.url).pathname.startsWith('/api/');
+    } catch (err) {
+        console.warn('[isApiTarget] Failed to parse Request URL, defaulting to true:', input.url, err);
+        return true;
+    }
 }
 
 export function withUserHeader(init: RequestInit = {}): RequestInit {
@@ -66,6 +72,18 @@ export function withUserHeader(init: RequestInit = {}): RequestInit {
     };
 }
 
+/**
+ * Fetch wrapper that attaches `x-user-email` to first-party `/api/` requests.
+ *
+ * Security model:
+ * - The `x-user-email` header is set by the trusted browser client and is used
+ *   only as an identity *hint*. The server independently enforces authorization
+ *   via `requireUser()` / `requireAdmin()` middleware backed by the `ADMIN_EMAILS`
+ *   allowlist, so a spoofed header cannot escalate privileges.
+ * - `isApiTarget` guards which requests receive the header; on ambiguous URLs it
+ *   defaults to **including** the header (fail-open), which is safe because the
+ *   header is non-secret and the server validates it anyway.
+ */
 export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
     if (!isApiTarget(input)) return fetch(input, init);
 
