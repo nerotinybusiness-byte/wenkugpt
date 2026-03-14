@@ -17,6 +17,16 @@ export const GEMINI_MODELS = [
         name: 'Gemini 2.5 Flash',
         description: 'Stable default for chat generation.',
     },
+    {
+        id: 'gemini-2.5-pro',
+        name: 'Gemini 2.5 Pro',
+        description: 'Most capable, slower.',
+    },
+    {
+        id: 'gemini-2.0-flash',
+        name: 'Gemini 2.0 Flash',
+        description: 'Fast and lightweight.',
+    },
 ] as const;
 
 const VALID_GEMINI_MODEL_IDS = new Set<string>(GEMINI_MODELS.map((model) => model.id));
@@ -138,7 +148,7 @@ export const useSettings = create<SettingsState>()(
         }),
         {
             name: 'wenkugpt-settings',
-            version: 3,
+            version: 4,
             migrate: (persistedState: unknown, version: number) => {
                 if (version === 1) {
                     return DEFAULT_SETTINGS;

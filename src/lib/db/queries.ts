@@ -134,10 +134,10 @@ export async function hybridSearch(
         c.id,
         ts_rank_cd(
           c.fts_vector,
-          plainto_tsquery('simple', ${query})
+          plainto_tsquery('czech', ${query})
         ) AS text_score
       FROM ${chunks} c
-      WHERE c.fts_vector @@ plainto_tsquery('simple', ${query})
+      WHERE c.fts_vector @@ plainto_tsquery('czech', ${query})
     )
     SELECT 
       v.id,

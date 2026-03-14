@@ -20,6 +20,7 @@ import ThemeSwitcher from '@/components/ThemeSwitcher';
 import { SettingsDialog } from './SettingsDialog';
 import dynamic from 'next/dynamic';
 import { apiFetch } from '@/lib/api/client-request';
+import { UserButton } from '@clerk/nextjs';
 
 const PDFViewer = dynamic(() => import('./PDFViewer'), {
     ssr: false,
@@ -83,14 +84,6 @@ interface ApiError {
 
 type ApiResponse<T> = ApiSuccess<T> | ApiError;
 
-interface ChatPostResponseData {
-    chatId: string;
-    response: string;
-    sources: Source[];
-    verified: boolean;
-    confidence: number;
-    stats?: SettingsState['lastStats'];
-}
 
 export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPanelProps) {
     // Only subscribe to the action, not the state values
@@ -246,50 +239,101 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                     query,
                     settings: settingsPayload,
                     chatId: currentChatId,
+                    stream: true,
                 }),
                 signal: abortControllerRef.current?.signal,
             });
 
-
-            const payload = await response.json() as ApiResponse<ChatPostResponseData>;
-
-            if (!payload.success) {
-                console.error('Chat API Error Details:', payload.details);
-                throw new Error(payload.error || 'Failed to get response');
+            // Update Chat ID from header
+            const headerChatId = response.headers.get('X-Chat-Id');
+            if (headerChatId && headerChatId !== currentChatId) {
+                setChatId(headerChatId);
             }
 
-            const data = payload.data;
-
-            // Update Chat ID if new session started
-            if (data.chatId && data.chatId !== currentChatId) {
-                setChatId(data.chatId);
+            if (!response.body) {
+                throw new Error('No response body');
             }
 
-            // Update messages with real response
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let streamedText = '';
+            let streamSources: Source[] | undefined;
+            const messageId = `ai-${Date.now()}`;
+
+            // Replace loading message with empty AI message
             setMessages(prev => {
                 const newMessages = [...prev];
-                // Remove loading message
-                newMessages.pop();
-
-                // Add AI response
+                newMessages.pop(); // Remove loading
                 newMessages.push({
-                    id: `ai-${Date.now()}`,
-                    content: data.response,
+                    id: messageId,
+                    content: '',
                     isUser: false,
-                    sources: data.sources,
-                    verified: data.verified,
-                    confidence: data.confidence,
                 });
-
-                // Update usage stats in store
-                if (data.stats) {
-                    setLastStats(data.stats);
-                }
-
                 return newMessages;
             });
 
-            if (data.sources && onSourcesChange) onSourcesChange(data.sources);
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                // Process complete lines
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                    if (line.startsWith('__SOURCES__:')) {
+                        const json = line.slice('__SOURCES__:'.length);
+                        streamSources = JSON.parse(json);
+                        if (streamSources && onSourcesChange) onSourcesChange(streamSources);
+                    } else if (line.startsWith('__DONE__:')) {
+                        const json = line.slice('__DONE__:'.length);
+                        const doneData = JSON.parse(json) as {
+                            verified: boolean;
+                            confidence: number;
+                            correctedResponse?: string;
+                            stats?: SettingsState['lastStats'];
+                        };
+
+                        const finalContent = doneData.correctedResponse || streamedText;
+
+                        setMessages(prev => prev.map(m =>
+                            m.id === messageId
+                                ? { ...m, content: finalContent, sources: streamSources, verified: doneData.verified, confidence: doneData.confidence }
+                                : m
+                        ));
+
+                        if (doneData.stats) {
+                            setLastStats(doneData.stats);
+                        }
+                    } else if (line.startsWith('__ERROR__:')) {
+                        const json = line.slice('__ERROR__:'.length);
+                        const errData = JSON.parse(json) as { error: string };
+                        throw new Error(errData.error);
+                    } else {
+                        // Raw text token
+                        streamedText += line;
+                        const currentText = streamedText;
+                        setMessages(prev => prev.map(m =>
+                            m.id === messageId ? { ...m, content: currentText } : m
+                        ));
+                    }
+                }
+            }
+
+            // Process any remaining buffer
+            if (buffer.trim()) {
+                if (buffer.startsWith('__DONE__:') || buffer.startsWith('__ERROR__:') || buffer.startsWith('__SOURCES__:')) {
+                    // Protocol line in remaining buffer - handled above
+                } else {
+                    streamedText += buffer;
+                    setMessages(prev => prev.map(m =>
+                        m.id === messageId ? { ...m, content: streamedText } : m
+                    ));
+                }
+            }
 
 
         } catch (error: unknown) {
@@ -517,8 +561,9 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                     {/* Spacer/Title placeholder if needed */}
                     <div />
 
-                    <div className="pointer-events-auto flex items-center justify-center scale-75 origin-right">
+                    <div className="pointer-events-auto flex items-center gap-3 scale-75 origin-right">
                         <ThemeSwitcher />
+                        <UserButton />
                     </div>
                 </header>
 

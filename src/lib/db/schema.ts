@@ -55,7 +55,7 @@ export type AccessLevel = 'public' | 'private' | 'team';
 export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type UserRole = 'user' | 'admin';
 export type VerificationLevel = 'basic' | 'auditor_loop';
-export type ModelType = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.0-flash' | 'gemini-1.5-flash' | 'gemini-1.5-pro' | 'claude-haiku';
+export type ModelType = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.0-flash';
 
 // =============================================================================
 // TABLE: USERS
@@ -64,6 +64,7 @@ export type ModelType = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.0-flas
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
+  clerkId: varchar('clerk_id', { length: 256 }).unique(),
   email: varchar('email', { length: 320 }).unique().notNull(),
   name: varchar('name', { length: 256 }),
   imageUrl: varchar('image_url', { length: 2048 }),

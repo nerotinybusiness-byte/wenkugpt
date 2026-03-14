@@ -199,8 +199,8 @@ export async function processPipeline(
                     chunkIndex: index,
                     tokenCount: chunk.tokenCount,
                     accessLevel,
-                    // Generate simple full-text search vector (Czech dict not available)
-                    ftsVector: sql`to_tsvector('simple', ${chunk.text})`,
+                    // Generate Czech full-text search vector
+                    ftsVector: sql`to_tsvector('czech', ${chunk.text})`,
                 }));
 
                 // Batch insert chunks (100 at a time for Supabase)
