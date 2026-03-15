@@ -224,7 +224,7 @@ async function loadProfilesFromFile(filePath: string): Promise<LoadedProfiles> {
         parsed = JSON.parse(text) as TemplateProfile | RegistryFile;
     } catch (fileError) {
         logError('Failed to load template profile file', { route: 'ingest', stage: 'template-load', filePath }, fileError);
-        return { profiles: [], defaultProfileId: null, warnings: [`invalid_profile_file:${path.basename(filePath)}`] };
+        return { profiles: [], defaultProfileId: null, warnings: [`profile_file_unreadable:${path.basename(filePath)}`] };
     }
     const warnings: string[] = [];
 
@@ -245,7 +245,7 @@ async function loadProfilesFromFile(filePath: string): Promise<LoadedProfiles> {
 
     const single = normalizeProfile(parsed);
     if (!single) {
-        warnings.push(`invalid_profile_file:${path.basename(filePath)}`);
+        warnings.push(`profile_file_invalid_structure:${path.basename(filePath)}`);
         return { profiles: [], defaultProfileId: null, warnings };
     }
 

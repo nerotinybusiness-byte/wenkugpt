@@ -134,6 +134,7 @@ async function classifyTermsWithLlm(query: string): Promise<string[]> {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   if (!apiKey) return [];
 
+  let responseText: string;
   try {
     const google = createGoogleGenerativeAI({ apiKey });
     const response = await generateText({
@@ -145,22 +146,31 @@ async function classifyTermsWithLlm(query: string): Promise<string[]> {
         `Query: ${query}`,
       ].join('\n'),
     });
-
-    const jsonMatch = response.text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return [];
-    const parsed = JSON.parse(jsonMatch[0]) as { terms?: unknown };
-    const terms = Array.isArray(parsed.terms) ? parsed.terms : [];
-
-    return dedupe(
-      terms
-        .filter((value): value is string => typeof value === 'string')
-        .map((value) => normalizeToken(value))
-        .filter(Boolean),
-    );
+    responseText = response.text;
   } catch (error) {
-    logError('RAG v2 fallback classifier failed', { route: 'rag-v2', stage: 'classifier' }, error);
+    logError('RAG v2 fallback classifier LLM call failed', { route: 'rag-v2', stage: 'classifier' }, error);
     return [];
   }
+
+  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return [];
+
+  let parsed: { terms?: unknown };
+  try {
+    parsed = JSON.parse(jsonMatch[0]) as { terms?: unknown };
+  } catch (error) {
+    logError('RAG v2 fallback classifier response parse failed', { route: 'rag-v2', stage: 'classifier-parse' }, error);
+    return [];
+  }
+
+  const terms = Array.isArray(parsed.terms) ? parsed.terms : [];
+
+  return dedupe(
+    terms
+      .filter((value): value is string => typeof value === 'string')
+      .map((value) => normalizeToken(value))
+      .filter(Boolean),
+  );
 }
 
 async function resolveAliases(

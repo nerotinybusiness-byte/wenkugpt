@@ -32,6 +32,22 @@ describe('isRagV2KillSwitchEnabled', () => {
       expect(isRagV2KillSwitchEnabled()).toBe(false);
     },
   );
+
+  it.each(['  true  ', '  1  ', '  yes  ', '  on  '])(
+    'returns true for whitespace-padded truthy value "%s"',
+    (value) => {
+      process.env.RAG_V2_KILL_SWITCH = value;
+      expect(isRagV2KillSwitchEnabled()).toBe(true);
+    },
+  );
+
+  it.each(['  false  ', '  0  ', '  no  ', '  off  '])(
+    'returns false for whitespace-padded falsy value "%s"',
+    (value) => {
+      process.env.RAG_V2_KILL_SWITCH = value;
+      expect(isRagV2KillSwitchEnabled()).toBe(false);
+    },
+  );
 });
 
 describe('getRagV2Flags', () => {

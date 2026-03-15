@@ -224,7 +224,7 @@ export async function proxy(request: NextRequest) {
         const { success, reset, remaining } = await limiter.limit(ip);
 
         if (!success) {
-          logWarn('Rate limit exceeded on /api/chat', { route: '/api/chat', ip, requestId });
+          logWarn('Rate limit exceeded on /api/chat', { route: 'chat', ip, requestId });
           return createRateLimitResponse(reset, RATE_LIMITS.chat.requests, requestId);
         }
 
@@ -240,7 +240,7 @@ export async function proxy(request: NextRequest) {
         const { success, reset, remaining } = await limiter.limit(ip);
 
         if (!success) {
-          logWarn('Rate limit exceeded on /api/ingest', { route: '/api/ingest', ip, requestId });
+          logWarn('Rate limit exceeded on /api/ingest', { route: 'ingest', ip, requestId });
           return createRateLimitResponse(reset, RATE_LIMITS.ingest.requests, requestId);
         }
 

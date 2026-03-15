@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
         });
     } catch (error) {
         const requestId = getRequestId(request);
-        logError('Documents GET error', { route: '/api/documents', requestId }, error);
+        logError('Documents GET error', { route: 'documents', requestId }, error);
         return apiError('DOCUMENTS_FETCH_FAILED', 'Failed to fetch documents', 500);
     }
 }

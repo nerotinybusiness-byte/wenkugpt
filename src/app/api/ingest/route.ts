@@ -74,7 +74,7 @@ export function parseIngestOptions(formData: FormData): {
                 };
             }
         } catch (optionsParseError) {
-            logWarn('Failed to parse ingest options JSON — using defaults', { route: '/api/ingest', stage: 'options-parse' }, optionsParseError);
+            logWarn('Failed to parse ingest options JSON — using defaults', { route: 'ingest', stage: 'options-parse' }, optionsParseError);
         }
     }
 
@@ -244,7 +244,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         });
     } catch (error) {
         const requestId = getRequestId(request);
-        logError('Ingest POST error', { route: '/api/ingest', requestId }, error);
+        logError('Ingest POST error', { route: 'ingest', requestId }, error);
         if (isIngestSchemaHealthError(error)) {
             return apiError('INGEST_SCHEMA_MISMATCH', mapIngestErrorMessage(error), 500);
         }

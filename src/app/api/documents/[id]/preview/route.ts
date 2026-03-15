@@ -65,7 +65,7 @@ export async function GET(
 
     } catch (error) {
         const requestId = getRequestId(request);
-        logError('Document preview GET error', { route: '/api/documents/[id]/preview', requestId }, error);
+        logError('Document preview GET error', { route: 'documents', requestId }, error);
         return apiError('DOCUMENT_PREVIEW_FAILED', 'Failed to fetch document preview', 500);
     }
 }

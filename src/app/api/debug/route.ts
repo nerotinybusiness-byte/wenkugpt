@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         return apiSuccess({ documents: results });
     } catch (error) {
         const requestId = getRequestId(request);
-        logError('Debug GET error', { route: '/api/debug', requestId }, error);
+        logError('Debug GET error', { route: 'debug', requestId }, error);
         return apiError('DEBUG_ENDPOINT_FAILED', 'Debug endpoint failed', 500);
     }
 }

@@ -66,7 +66,7 @@ export async function PATCH(
 
     } catch (error) {
         const requestId = getRequestId(request);
-        logError('Document PATCH error', { route: '/api/documents/[id]', requestId }, error);
+        logError('Document PATCH error', { route: 'documents', requestId }, error);
         return apiError('DOCUMENT_UPDATE_FAILED', 'Failed to update document', 500);
     }
 }
@@ -101,7 +101,7 @@ export async function DELETE(
 
     } catch (error) {
         const requestId = getRequestId(request);
-        logError('Document DELETE error', { route: '/api/documents/[id]', requestId }, error);
+        logError('Document DELETE error', { route: 'documents', requestId }, error);
         return apiError('DOCUMENT_DELETE_FAILED', 'Failed to delete document', 500);
     }
 }

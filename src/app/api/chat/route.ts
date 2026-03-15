@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
         const ragEngine = isRagV2KillSwitchEnabled() ? 'v1' : requestedEngine;
         if (ragEngine !== requestedEngine) {
             logWarn('RAG v2 kill switch active — engine downgraded to v1', {
-                route: '/api/chat',
+                route: 'chat',
                 requestId,
                 requestedEngine,
                 effectiveEngine: ragEngine,
@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
         if (shouldForceFallback()) {
             errorCode = 'CHAT_UPSTREAM_TRANSIENT';
             logInfo('Chat fallback forced by env', {
-                route: '/api/chat',
+                route: 'chat',
                 requestId,
                 degraded: true,
                 errorCode,
@@ -240,7 +240,7 @@ export async function POST(request: NextRequest) {
                     logError(
                         'Chat RAG attempt failed',
                         {
-                            route: '/api/chat',
+                            route: 'chat',
                             requestId,
                             stage: classified.stage,
                             attempt,
@@ -310,7 +310,7 @@ export async function POST(request: NextRequest) {
                 logError(
                     'Chat degraded message persistence failed',
                     {
-                        route: '/api/chat',
+                        route: 'chat',
                         requestId,
                         stage: 'database',
                         errorCode: degradedResponse.errorCode,
@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
             }
 
             logError('Chat response degraded — all RAG attempts failed', {
-                route: '/api/chat',
+                route: 'chat',
                 requestId,
                 degraded: true,
                 errorCode: degradedResponse.errorCode,
@@ -378,7 +378,7 @@ export async function POST(request: NextRequest) {
         logError(
             'Chat API error',
             {
-                route: '/api/chat',
+                route: 'chat',
                 requestId,
                 stage: classified.stage,
                 errorCode: classified.code,
@@ -452,7 +452,7 @@ export async function GET(request: NextRequest) {
 
         return withRequestId(apiSuccess({ messages: typedMessages }), requestId);
     } catch (error) {
-        logError('Chat GET error', { route: '/api/chat', requestId }, error);
+        logError('Chat GET error', { route: 'chat', requestId }, error);
         return withRequestId(apiError('CHAT_FETCH_FAILED', 'Failed to fetch messages', 500), requestId);
     }
 }

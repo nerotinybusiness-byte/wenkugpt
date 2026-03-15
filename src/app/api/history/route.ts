@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
 
     } catch (error) {
         const requestId = getRequestId(request);
-        logError('History GET error', { route: '/api/history', requestId }, error);
+        logError('History GET error', { route: 'history', requestId }, error);
         return apiError('HISTORY_FETCH_FAILED', 'Failed to fetch history', 500);
     }
 }
@@ -70,7 +70,7 @@ export async function DELETE(request: NextRequest) {
 
     } catch (error) {
         const requestId = getRequestId(request);
-        logError('History DELETE error', { route: '/api/history', requestId }, error);
+        logError('History DELETE error', { route: 'history', requestId }, error);
         return apiError('HISTORY_CLEAR_FAILED', 'Failed to clear history', 500);
     }
 }
