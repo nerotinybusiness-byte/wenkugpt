@@ -288,24 +288,17 @@ export async function proxy(request: NextRequest, event: NextFetchEvent): Promis
         // void: Clerk passed through; our callback already ran inside clerkMiddleware
         return handleRequest(request);
     } catch (error) {
-        // Clerk handshake errors occur when session cookies are stale/mismatched.
-        // Clear Clerk cookies and redirect to sign-in to recover.
+        // Any Clerk error (handshake, missing key, auth redirect, etc.) → redirect to sign-in.
+        // Handshake errors additionally clear stale Clerk cookies.
+        logError('Clerk middleware error', { url: request.url }, error);
         const isHandshakeError = error instanceof Error && error.message.includes('handshake');
+        const response = NextResponse.redirect(new URL('/sign-in', request.url));
         if (isHandshakeError) {
-            const response = NextResponse.redirect(new URL('/sign-in', request.url));
             for (const cookie of ['__clerk_handshake', '__session', '__client_uat']) {
                 response.cookies.delete(cookie);
             }
-            return response;
         }
-        // Non-handshake Clerk errors: do NOT fall through to handleRequest —
-        // auth.protect() has not run. Return 503 instead.
-        logError('Clerk middleware error', { url: request.url }, error);
-        const errResponse = NextResponse.json(
-            { success: false, data: null, error: 'Authentication service unavailable', code: 'AUTH_UNAVAILABLE' },
-            { status: 503 }
-        );
-        return applySecurityHeaders(errResponse, createRequestId());
+        return response;
     }
 }
 
