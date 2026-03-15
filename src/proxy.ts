@@ -1,10 +1,13 @@
 /**
  * WENKUGPT - Security Proxy
  *
- * Primary concern: Clerk authentication (auth.protect() on all non-public routes).
- * Also applies rate limiting and security headers on every request.
+ * Applies rate limiting and security headers on every request.
+ * Auth enforcement is currently disabled — app is open access.
  *
- * - Auth: Clerk middleware; public routes: /sign-in, /sign-up, /api/health
+ * TODO: To re-enable auth, install a production-ready auth provider
+ * (e.g. Clerk with a custom domain, NextAuth, or similar) and wrap
+ * the proxy() function accordingly.
+ *
  * - Rate limiting: Upstash Redis-based (10 req/min chat, 3/hr ingest)
  * - Security headers: CSP, HSTS, X-Frame-Options, etc.
  *
@@ -12,22 +15,15 @@
  */
 
 import { type NextFetchEvent, NextRequest, NextResponse } from 'next/server';
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { createRequestId, logError, logWarn } from '@/lib/logger';
 
-const isPublicRoute = createRouteMatcher([
-    '/sign-in(.*)',
-    '/sign-up(.*)',
-    '/api/health(.*)',
-]);
-
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 const scriptSrcDirective = IS_PRODUCTION
-  ? "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://*.clerk.accounts.dev https://challenges.cloudflare.com"
-  : "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://*.clerk.accounts.dev https://challenges.cloudflare.com";
+  ? "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'"
+  : "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'";
 
 const CSP_DIRECTIVES = [
   "default-src 'self'",
@@ -36,8 +32,7 @@ const CSP_DIRECTIVES = [
   "font-src 'self' https://fonts.gstatic.com https://r2cdn.perplexity.ai data:",
   "img-src 'self' data: blob: https:",
   "worker-src 'self' blob:",
-  "connect-src 'self' https://*.supabase.co https://*.google.com https://*.anthropic.com https://*.cohere.com https://api.cohere.com https://*.upstash.io wss://*.supabase.co https://api.clerk.com https://*.clerk.accounts.dev https://*.clerk.dev https://challenges.cloudflare.com https://clerk-telemetry.com",
-  "frame-src https://accounts.clerk.com https://*.clerk.accounts.dev https://challenges.cloudflare.com",
+  "connect-src 'self' https://*.supabase.co https://*.google.com https://*.anthropic.com https://*.cohere.com https://api.cohere.com https://*.upstash.io wss://*.supabase.co",
   "frame-ancestors 'none'",
   "form-action 'self'",
   "base-uri 'self'",
@@ -268,43 +263,9 @@ async function handleRequest(request: NextRequest): Promise<NextResponse> {
   return applySecurityHeaders(response, requestId);
 }
 
-const clerkProxy = clerkMiddleware(
-    async (auth, request) => {
-        const { pathname } = request.nextUrl;
-        if (!isPublicRoute(request) && !pathname.startsWith('/_next') && !pathname.startsWith('/static')) {
-            await auth.protect();
-        }
-        return handleRequest(request);
-    },
-    {
-        publishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY,
-        secretKey: process.env.CLERK_SECRET_KEY,
-    },
-);
-
 export async function proxy(request: NextRequest, event: NextFetchEvent): Promise<NextResponse> {
-    try {
-        const result = await clerkProxy(request, event);
-        if (result) return result as NextResponse;
-        // void: Clerk passed through; our callback already ran inside clerkMiddleware
-        return handleRequest(request);
-    } catch (error) {
-        // Any Clerk error (handshake, missing key, etc.) → redirect to sign-in.
-        // Exception: if already on a public route, fall through to avoid infinite redirect loops.
-        logError('Clerk middleware error', { url: request.url }, error);
-        const { pathname } = request.nextUrl;
-        if (isPublicRoute(request) || pathname.startsWith('/_next') || pathname.startsWith('/static')) {
-            return handleRequest(request);
-        }
-        const isHandshakeError = error instanceof Error && error.message.includes('handshake');
-        const response = NextResponse.redirect(new URL('/sign-in', request.url));
-        if (isHandshakeError) {
-            for (const cookie of ['__clerk_handshake', '__session', '__client_uat']) {
-                response.cookies.delete(cookie);
-            }
-        }
-        return response;
-    }
+  void event;
+  return handleRequest(request);
 }
 
 export const config = {
