@@ -1,18 +1,21 @@
 /**
  * WENKUGPT - Security Proxy
  *
- * Combines rate limiting and security headers:
+ * Primary concern: Clerk authentication (auth.protect() on all non-public routes).
+ * Also applies rate limiting and security headers on every request.
+ *
+ * - Auth: Clerk middleware; public routes: /sign-in, /sign-up, /api/health
  * - Rate limiting: Upstash Redis-based (10 req/min chat, 3/hr ingest)
  * - Security headers: CSP, HSTS, X-Frame-Options, etc.
  *
- * Uses sliding window algorithm for fair limiting.
+ * Uses sliding window algorithm for rate limiting.
  */
 
 import { type NextFetchEvent, NextRequest, NextResponse } from 'next/server';
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
-import { createRequestId, logWarn } from '@/lib/logger';
+import { createRequestId, logError, logWarn } from '@/lib/logger';
 
 const isPublicRoute = createRouteMatcher([
     '/sign-in(.*)',
@@ -257,7 +260,7 @@ async function handleRequest(request: NextRequest): Promise<NextResponse> {
       }
     }
   } catch (error) {
-    logWarn('Rate limiting error, failing open', { route: pathname, ip, requestId }, error);
+    logError('Rate limiting error, failing open', { route: pathname, ip, requestId }, error);
     return applySecurityHeaders(response, requestId);
   }
 
@@ -281,7 +284,9 @@ const clerkProxy = clerkMiddleware(
 export async function proxy(request: NextRequest, event: NextFetchEvent): Promise<NextResponse> {
     try {
         const result = await clerkProxy(request, event);
-        return result as NextResponse;
+        if (result) return result as NextResponse;
+        // void: Clerk passed through; our callback already ran inside clerkMiddleware
+        return handleRequest(request);
     } catch (error) {
         // Clerk handshake errors occur when session cookies are stale/mismatched.
         // Clear Clerk cookies and redirect to sign-in to recover.
@@ -293,9 +298,14 @@ export async function proxy(request: NextRequest, event: NextFetchEvent): Promis
             }
             return response;
         }
-        // For other Clerk errors, fall through to the regular proxy (security headers still applied).
-        console.error('[WenkuGPT] Clerk middleware error:', error);
-        return handleRequest(request);
+        // Non-handshake Clerk errors: do NOT fall through to handleRequest —
+        // auth.protect() has not run. Return 503 instead.
+        logError('Clerk middleware error', { url: request.url }, error);
+        const errResponse = NextResponse.json(
+            { success: false, data: null, error: 'Authentication service unavailable', code: 'AUTH_UNAVAILABLE' },
+            { status: 503 }
+        );
+        return applySecurityHeaders(errResponse, createRequestId());
     }
 }
 
