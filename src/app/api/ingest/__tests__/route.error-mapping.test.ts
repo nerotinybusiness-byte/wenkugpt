@@ -10,7 +10,7 @@ async function loadMapIngestErrorMessage() {
         }),
     }));
 
-    const mod = await import('@/app/api/ingest/route');
+    const mod = await import('@/app/api/ingest/ingest-utils');
     return mod.mapIngestErrorMessage;
 }
 

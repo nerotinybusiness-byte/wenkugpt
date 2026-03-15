@@ -8,7 +8,7 @@ async function loadParseIngestOptions() {
         isIngestSchemaHealthError: vi.fn(() => false),
     }));
 
-    const mod = await import('@/app/api/ingest/route');
+    const mod = await import('@/app/api/ingest/ingest-utils');
     return mod.parseIngestOptions;
 }
 
