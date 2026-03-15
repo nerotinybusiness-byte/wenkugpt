@@ -288,9 +288,13 @@ export async function proxy(request: NextRequest, event: NextFetchEvent): Promis
         // void: Clerk passed through; our callback already ran inside clerkMiddleware
         return handleRequest(request);
     } catch (error) {
-        // Any Clerk error (handshake, missing key, auth redirect, etc.) → redirect to sign-in.
-        // Handshake errors additionally clear stale Clerk cookies.
+        // Any Clerk error (handshake, missing key, etc.) → redirect to sign-in.
+        // Exception: if already on a public route, fall through to avoid infinite redirect loops.
         logError('Clerk middleware error', { url: request.url }, error);
+        const { pathname } = request.nextUrl;
+        if (isPublicRoute(request) || pathname.startsWith('/_next') || pathname.startsWith('/static')) {
+            return handleRequest(request);
+        }
         const isHandshakeError = error instanceof Error && error.message.includes('handshake');
         const response = NextResponse.redirect(new URL('/sign-in', request.url));
         if (isHandshakeError) {
