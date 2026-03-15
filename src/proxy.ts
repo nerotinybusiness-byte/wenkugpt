@@ -26,8 +26,8 @@ const isPublicRoute = createRouteMatcher([
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 const scriptSrcDirective = IS_PRODUCTION
-  ? "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'"
-  : "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'";
+  ? "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://*.clerk.accounts.dev"
+  : "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://*.clerk.accounts.dev";
 
 const CSP_DIRECTIVES = [
   "default-src 'self'",
