@@ -2,16 +2,14 @@
  * WENKUGPT - Security Proxy
  *
  * Applies rate limiting and security headers on every request.
- * Auth enforcement is currently disabled — app is open access.
- *
- * TODO: To re-enable auth, install a production-ready auth provider
- * (e.g. Clerk with a custom domain, NextAuth, or similar) and wrap
- * the proxy() function accordingly.
+ * Authentication is enforced per-route via requireUser() / requireAdmin()
+ * in src/lib/auth/request-auth.ts — not at the middleware layer.
  *
  * - Rate limiting: Upstash Redis-based (10 req/min chat, 3/hr ingest)
  * - Security headers: CSP, HSTS, X-Frame-Options, etc.
  *
  * Uses sliding window algorithm for rate limiting.
+ * Rate limiting is bypassed (with a logWarn) when Upstash env vars are not set.
  */
 
 import { type NextFetchEvent, NextRequest, NextResponse } from 'next/server';
@@ -29,10 +27,10 @@ const CSP_DIRECTIVES = [
   "default-src 'self'",
   scriptSrcDirective,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com https://r2cdn.perplexity.ai data:",
+  "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob: https:",
   "worker-src 'self' blob:",
-  "connect-src 'self' https://*.supabase.co https://*.google.com https://*.anthropic.com https://*.cohere.com https://api.cohere.com https://*.upstash.io wss://*.supabase.co",
+  "connect-src 'self' https://*.supabase.co https://*.google.com https://*.googleapis.com https://*.anthropic.com https://*.cohere.com https://api.cohere.com https://*.upstash.io wss://*.supabase.co",
   "frame-ancestors 'none'",
   "form-action 'self'",
   "base-uri 'self'",
@@ -264,8 +262,18 @@ async function handleRequest(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function proxy(request: NextRequest, event: NextFetchEvent): Promise<NextResponse> {
-  void event;
-  return handleRequest(request);
+    void event;
+    try {
+        return await handleRequest(request);
+    } catch (error) {
+        const requestId = createRequestId();
+        logError('Unhandled middleware error', { url: request.url, requestId }, error);
+        const response = NextResponse.json(
+            { success: false, data: null, error: 'Internal server error', code: 'INTERNAL_ERROR' },
+            { status: 500 }
+        );
+        return applySecurityHeaders(response, requestId);
+    }
 }
 
 export const config = {

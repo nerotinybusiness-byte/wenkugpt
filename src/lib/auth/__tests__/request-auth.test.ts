@@ -56,18 +56,13 @@ describe('request auth', () => {
         process.env = originalEnv;
     });
 
-    it('returns AUTH_UNAUTHORIZED when Clerk session is absent', async () => {
-        process.env = { ...process.env, NODE_ENV: 'production', CLERK_SECRET_KEY: 'sk_test_xxx' };
+    it('returns AUTH_UNAUTHORIZED when no identity can be resolved', async () => {
         delete process.env.DEV_DEFAULT_USER_EMAIL;
         delete process.env.ADMIN_EMAILS;
 
         const { db } = createDbMock();
         const eq = vi.fn((left: unknown, right: unknown) => ({ left, right }));
 
-        vi.doMock('@clerk/nextjs/server', () => ({
-            auth: vi.fn().mockResolvedValue({ userId: null }),
-            currentUser: vi.fn().mockResolvedValue(null),
-        }));
         vi.doMock('@/lib/db', () => ({ db }));
         vi.doMock('@/lib/db/schema', () => ({
             users: { id: 'id', email: 'email', role: 'role', clerkId: 'clerkId', name: 'name', imageUrl: 'imageUrl', updatedAt: 'updatedAt' },
@@ -90,23 +85,13 @@ describe('request auth', () => {
     });
 
     it('returns AUTH_FORBIDDEN when authenticated user is not admin', async () => {
-        process.env = { ...process.env, NODE_ENV: 'production', CLERK_SECRET_KEY: 'sk_test_xxx' };
         process.env.ADMIN_EMAILS = 'admin@example.com';
 
         const { db } = createDbMock({
-            selectedRows: [{ id: 'user-1', email: 'member@example.com', role: 'user', clerkId: 'clerk_member' }],
+            selectedRows: [{ id: 'user-1', email: 'member@example.com', role: 'user' }],
         });
         const eq = vi.fn((left: unknown, right: unknown) => ({ left, right }));
 
-        vi.doMock('@clerk/nextjs/server', () => ({
-            auth: vi.fn().mockResolvedValue({ userId: 'clerk_member' }),
-            currentUser: vi.fn().mockResolvedValue({
-                id: 'clerk_member',
-                emailAddresses: [{ emailAddress: 'member@example.com' }],
-                fullName: 'Member',
-                imageUrl: null,
-            }),
-        }));
         vi.doMock('@/lib/db', () => ({ db }));
         vi.doMock('@/lib/db/schema', () => ({
             users: { id: 'id', email: 'email', role: 'role', clerkId: 'clerkId', name: 'name', imageUrl: 'imageUrl', updatedAt: 'updatedAt' },
@@ -114,7 +99,9 @@ describe('request auth', () => {
         vi.doMock('drizzle-orm', () => ({ eq }));
 
         const { requireAdmin } = await import('@/lib/auth/request-auth');
-        const request = new NextRequest('http://localhost/api/documents');
+        const request = new NextRequest('http://localhost/api/documents', {
+            headers: { 'x-user-email': 'member@example.com' },
+        });
 
         const result = await requireAdmin(request);
         expect(result.ok).toBe(false);
@@ -130,23 +117,13 @@ describe('request auth', () => {
     });
 
     it('promotes allowlisted user to admin and passes requireAdmin', async () => {
-        process.env = { ...process.env, NODE_ENV: 'production', CLERK_SECRET_KEY: 'sk_test_xxx' };
         process.env.ADMIN_EMAILS = 'admin@example.com';
 
         const { db, mocks } = createDbMock({
-            selectedRows: [{ id: 'user-2', email: 'admin@example.com', role: 'user', clerkId: 'clerk_admin' }],
+            selectedRows: [{ id: 'user-2', email: 'admin@example.com', role: 'user' }],
         });
         const eq = vi.fn((left: unknown, right: unknown) => ({ left, right }));
 
-        vi.doMock('@clerk/nextjs/server', () => ({
-            auth: vi.fn().mockResolvedValue({ userId: 'clerk_admin' }),
-            currentUser: vi.fn().mockResolvedValue({
-                id: 'clerk_admin',
-                emailAddresses: [{ emailAddress: 'admin@example.com' }],
-                fullName: 'Admin',
-                imageUrl: null,
-            }),
-        }));
         vi.doMock('@/lib/db', () => ({ db }));
         vi.doMock('@/lib/db/schema', () => ({
             users: { id: 'id', email: 'email', role: 'role', clerkId: 'clerkId', name: 'name', imageUrl: 'imageUrl', updatedAt: 'updatedAt' },
@@ -154,7 +131,9 @@ describe('request auth', () => {
         vi.doMock('drizzle-orm', () => ({ eq }));
 
         const { requireAdmin } = await import('@/lib/auth/request-auth');
-        const request = new NextRequest('http://localhost/api/documents');
+        const request = new NextRequest('http://localhost/api/documents', {
+            headers: { 'x-user-email': 'admin@example.com' },
+        });
 
         const result = await requireAdmin(request);
         expect(result.ok).toBe(true);
