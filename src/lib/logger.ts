@@ -73,7 +73,7 @@ export function devLog(...args: unknown[]) {
 export function logDebug(message: string, context?: LogContext) {
   if (isBrowser) {
     const ctx = buildContext(context);
-    ctx ? console.debug(message, ctx) : console.debug(message);
+    if (ctx) { console.debug(message, ctx); } else { console.debug(message); }
   } else {
     console.debug(formatMessage('debug', message, context));
   }
@@ -82,7 +82,7 @@ export function logDebug(message: string, context?: LogContext) {
 export function logInfo(message: string, context?: LogContext) {
   if (isBrowser) {
     const ctx = buildContext(context);
-    ctx ? console.info(message, ctx) : console.info(message);
+    if (ctx) { console.info(message, ctx); } else { console.info(message); }
   } else {
     console.info(formatMessage('info', message, context));
   }
@@ -91,7 +91,7 @@ export function logInfo(message: string, context?: LogContext) {
 export function logWarn(message: string, context?: LogContext, error?: unknown) {
   if (isBrowser) {
     const ctx = buildContext(context, error);
-    ctx ? console.warn(message, ctx) : console.warn(message);
+    if (ctx) { console.warn(message, ctx); } else { console.warn(message); }
   } else {
     console.warn(formatMessage('warn', message, context, error));
   }
@@ -100,7 +100,7 @@ export function logWarn(message: string, context?: LogContext, error?: unknown) 
 export function logError(message: string, context?: LogContext, error?: unknown) {
   if (isBrowser) {
     const ctx = buildContext(context, error);
-    ctx ? console.error(message, ctx) : console.error(message);
+    if (ctx) { console.error(message, ctx); } else { console.error(message); }
   } else {
     console.error(formatMessage('error', message, context, error));
   }

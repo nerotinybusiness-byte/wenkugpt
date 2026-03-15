@@ -99,38 +99,6 @@ interface ApiError {
 
 type ApiResponse<T> = ApiSuccess<T> | ApiError;
 
-interface ChatPostResponseData {
-    chatId: string;
-    response: string;
-    sources: Source[];
-    verified: boolean;
-    confidence: number;
-    requestId?: string;
-    degraded?: boolean;
-    errorCode?: string;
-    stats?: SettingsState['lastStats'];
-    interpretation?: {
-        detectedTerms: string[];
-        resolvedConcepts: Array<{
-            conceptId: string;
-            conceptKey: string;
-            alias: string;
-            definitionVersionId: string | null;
-            confidence: number;
-        }>;
-        definitionVersionIds: string[];
-        rewrittenQuery?: string;
-    };
-    ambiguities?: Array<{
-        term: string;
-        candidateConcepts: string[];
-        reason: string;
-    }>;
-    engineMeta?: {
-        engine: 'v1' | 'v2';
-        mode: 'compat' | 'graph';
-    };
-}
 
 const CHAT_CLIENT_MAX_ATTEMPTS = 2;
 const CHAT_CLIENT_RETRY_DELAY_MS = 400;
@@ -140,9 +108,6 @@ function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isRetryableApiFailure(code?: string, status?: number): boolean {
-    return status === 503 || code === 'CHAT_UPSTREAM_TRANSIENT' || code === 'CHAT_DB_TRANSIENT';
-}
 
 function isRetryableNetworkError(error: unknown): boolean {
     if (!(error instanceof Error)) return false;
@@ -156,12 +121,6 @@ function isRetryableNetworkError(error: unknown): boolean {
     );
 }
 
-function extractRequestIdFromErrorPayload(payload: ApiError, response: Response): string | undefined {
-    const headerRequestId = response.headers.get('x-request-id') || undefined;
-    if (headerRequestId) return headerRequestId;
-    if (typeof payload.details === 'string') return undefined;
-    return payload.details?.requestId;
-}
 
 export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPanelProps) {
     // Only subscribe to the action, not the state values
