@@ -1,3 +1,4 @@
+import { logError } from '@/lib/logger';
 import {
     DEFAULT_OCR_TIMEOUT_MS,
     extractOcrTextForPdfPagesWithGemini,
@@ -77,6 +78,7 @@ export async function runOcrRescueProvider(params: OcrProviderRunParams): Promis
             pagesProcessed,
         };
     } catch (error) {
+        logError('OCR rescue provider failed', { route: 'ingest', stage: 'ocr-provider', engine }, error);
         return {
             ocrByPage: new Map<number, string>(),
             engine,

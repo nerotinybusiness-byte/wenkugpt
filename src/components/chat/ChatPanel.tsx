@@ -24,6 +24,7 @@ import { SettingsDialog } from './SettingsDialog';
 import { ManageFilesDialog } from './ManageFilesDialog';
 import dynamic from 'next/dynamic';
 import { apiFetch } from '@/lib/api/client-request';
+import { devLog, logError } from '@/lib/logger';
 
 const PDFViewer = dynamic(() => import('./PDFViewer'), {
     ssr: false,
@@ -199,12 +200,12 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
     };
 
     const onCitationSelect = (source: CitationPayload) => {
-        console.log('ChatPanel: Citation clicked', source);
+        devLog('ChatPanel: Citation clicked', source);
         onCitationClick?.(source);
 
         // Defensive check for filename
         if (!source || (!source.filename && !source.title && !source.originalFilename)) {
-            console.warn('ChatPanel: Citation has no filename or title', source);
+            devLog('ChatPanel: Citation has no filename or title', source);
             return;
         }
 
@@ -247,7 +248,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
 
             setIsPdfOpen(true);
         } else {
-            console.error('ChatPanel: Source has no filename', source);
+            logError('ChatPanel: Source has no filename', {}, source);
         }
 
     };
@@ -272,7 +273,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                 setMessages(loadedMessages);
             }
         } catch (error) {
-            console.error('Failed to load chat', error);
+            logError('Failed to load chat', {}, error);
         } finally {
             setIsLoading(false);
         }
@@ -308,7 +309,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                         setHistory(payload.data.history);
                     }
                 })
-                .catch(err => console.error('Failed to load history', err));
+                .catch(err => logError('Failed to load history', {}, err));
         }
     }, [isMenuOpen]);
 
@@ -361,7 +362,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                         const requestId = extractRequestIdFromErrorPayload(payload, response);
                         const retryable = isRetryableApiFailure(payload.code, response.status);
 
-                        console.error('Chat API error', {
+                        logError('Chat API error', {
                             code: payload.code,
                             status: response.status,
                             requestId,
@@ -435,7 +436,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
 
             if (data.sources && onSourcesChange) onSourcesChange(data.sources);
             if (data.requestId) {
-                console.info('Chat response requestId', data.requestId);
+                devLog('Chat response requestId', data.requestId);
             }
 
 
@@ -443,7 +444,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
             const isAbortError = error instanceof Error && error.name === 'AbortError';
 
             if (isAbortError) {
-                console.log('Chat request aborted');
+                devLog('Chat request aborted');
                 setMessages(prev => {
                     const newMessages = [...prev];
                     const lastIdx = newMessages.findIndex((m) => m.isLoading);
@@ -465,7 +466,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                     ? ((error as Error & { requestId?: string }).requestId)
                     : undefined;
 
-                console.error('Chat error:', { error, requestId });
+                logError('Chat error', { requestId }, error);
                 setMessages(prev => {
                     const newMessages = [...prev];
                     newMessages.pop(); // Remove loading
@@ -664,7 +665,7 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                                                     setIsMenuOpen(false);
                                                 }
                                             } catch (e) {
-                                                console.error('Failed to clear history', e);
+                                                logError('Failed to clear history', {}, e);
                                             }
                                         }}
                                         className="w-full text-xs text-red-400/70 hover:text-red-400 py-2 hover:bg-red-500/10 rounded-lg transition-colors flex items-center justify-center gap-2"

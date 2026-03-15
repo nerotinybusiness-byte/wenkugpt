@@ -143,11 +143,7 @@ export async function extractOcrTextForPdfPagesWithGemini(
         return firstAttempt;
     }
 
-    try {
-        return await runGeminiOcrAttempt(model, prompt, pdfData, timeoutMs);
-    } catch (error) {
-        throw error;
-    }
+    return runGeminiOcrAttempt(model, prompt, pdfData, timeoutMs);
 }
 
 export const extractOcrTextForPdfPages = extractOcrTextForPdfPagesWithGemini;

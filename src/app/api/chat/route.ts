@@ -9,7 +9,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { executeRAG, type RAGConfig, type RAGEngineId } from '@/lib/ai/agents';
 import { requireUser } from '@/lib/auth/request-auth';
-import { getRequestId, logError, logInfo } from '@/lib/logger';
+import { getRequestId, logError, logInfo, logWarn } from '@/lib/logger';
 import type { MessageSource } from '@/lib/db/schema';
 import { apiError, apiSuccess } from '@/lib/api/response';
 import { isRagV2KillSwitchEnabled } from '@/lib/rag-v2/flags';
@@ -186,6 +186,14 @@ export async function POST(request: NextRequest) {
 
         const requestedEngine = resolveRagEngine(settings?.ragEngine);
         const ragEngine = isRagV2KillSwitchEnabled() ? 'v1' : requestedEngine;
+        if (ragEngine !== requestedEngine) {
+            logWarn('RAG v2 kill switch active — engine downgraded to v1', {
+                route: '/api/chat',
+                requestId,
+                requestedEngine,
+                effectiveEngine: ragEngine,
+            });
+        }
 
         const ragConfig: Partial<RAGConfig> = {
             ragEngine,
@@ -312,7 +320,7 @@ export async function POST(request: NextRequest) {
                 );
             }
 
-            logInfo('Chat response degraded', {
+            logError('Chat response degraded — all RAG attempts failed', {
                 route: '/api/chat',
                 requestId,
                 degraded: true,

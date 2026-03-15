@@ -22,6 +22,7 @@ import { devLog, logError, logInfo } from '@/lib/logger';
 import { getRagV2Flags } from '@/lib/rag-v2/flags';
 import { runV2QueryFlow } from '@/lib/rag-v2/query-flow';
 import type { AmbiguityPayload, AmbiguityPolicy, ContextScope, InterpretationPayload } from '@/lib/rag-v2/types';
+export type { RAGEngineId } from '@/lib/settings/store';
 
 /**
  * Source chunk with citation ID
@@ -91,7 +92,6 @@ export interface RAGResponse {
     };
 }
 
-export type RAGEngineId = 'v1' | 'v2';
 const DEFAULT_RAG_ENGINE: RAGEngineId = 'v2';
 
 /**

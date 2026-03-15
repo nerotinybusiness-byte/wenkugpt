@@ -9,7 +9,7 @@ import {
 import type { AmbiguityPayload, AmbiguityPolicy, ContextScope, QueryFlowResult, ResolvedConcept } from './types';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateText } from 'ai';
-import { logWarn } from '@/lib/logger';
+import { logError } from '@/lib/logger';
 
 interface QueryFlowInput {
   query: string;
@@ -158,7 +158,7 @@ async function classifyTermsWithLlm(query: string): Promise<string[]> {
         .filter(Boolean),
     );
   } catch (error) {
-    logWarn('RAG v2 fallback classifier failed', { route: 'rag-v2', stage: 'classifier' }, error);
+    logError('RAG v2 fallback classifier failed', { route: 'rag-v2', stage: 'classifier' }, error);
     return [];
   }
 }

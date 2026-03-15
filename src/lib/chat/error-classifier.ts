@@ -58,8 +58,6 @@ export function classifyChatError(error: unknown): ChatErrorClassification {
     || message.includes('timeout expired')
     || message.includes('remaining connection slots are reserved')
     || message.includes('sorry, too many clients already')
-    || message.includes('db')
-    || message.includes('pool')
   );
 
   if (isDbTransient) {

@@ -13,7 +13,7 @@ import { resolveOcrEngine } from '@/lib/ingest/ocr-provider';
 import type { OcrEngine } from '@/lib/ingest/ocr';
 import { requireAdmin } from '@/lib/auth/request-auth';
 import { apiError, apiSuccess } from '@/lib/api/response';
-import { getRequestId, logError } from '@/lib/logger';
+import { getRequestId, logError, logWarn } from '@/lib/logger';
 import { assertIngestSchemaHealth, isIngestSchemaHealthError } from '@/lib/db/schema-health';
 
 export const runtime = 'nodejs';
@@ -73,8 +73,8 @@ export function parseIngestOptions(formData: FormData): {
                     folderName: sanitizeFolderName(validated.data.folderName),
                 };
             }
-        } catch {
-            // fallback below
+        } catch (optionsParseError) {
+            logWarn('Failed to parse ingest options JSON — using defaults', { route: '/api/ingest', stage: 'options-parse' }, optionsParseError);
         }
     }
 

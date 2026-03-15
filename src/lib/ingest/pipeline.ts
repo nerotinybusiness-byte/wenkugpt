@@ -514,7 +514,7 @@ export async function processPipeline(
                             : sql`to_tsvector('simple', ${chunk.text})`,
                     };
                 });
-                const documentFinalStatus = chunkRecords.length > 0
+                const documentFinalStatus = chunkRecords.filter(r => !r.isTemplateBoilerplate).length > 0
                     ? 'completed'
                     : 'failed';
                 const documentProcessingError = documentFinalStatus === 'failed'

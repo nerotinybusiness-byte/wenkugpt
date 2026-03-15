@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import type { BoundingBox } from '@/lib/db/schema';
-import { devLog, logWarn } from '@/lib/logger';
+import { devLog, logError, logWarn } from '@/lib/logger';
 import type { SemanticChunk } from './chunker';
 import type { ParsedDocument, ParsedPage } from './parser';
 import { extractOcrTextForPdfPages, mapOcrFailureCode } from './ocr';
@@ -217,8 +217,15 @@ function normalizeProfile(value: unknown): TemplateProfile | null {
 }
 
 async function loadProfilesFromFile(filePath: string): Promise<LoadedProfiles> {
-    const text = await fs.readFile(filePath, 'utf-8');
-    const parsed = JSON.parse(text) as TemplateProfile | RegistryFile;
+    let text: string;
+    let parsed: TemplateProfile | RegistryFile;
+    try {
+        text = await fs.readFile(filePath, 'utf-8');
+        parsed = JSON.parse(text) as TemplateProfile | RegistryFile;
+    } catch (fileError) {
+        logError('Failed to load template profile file', { route: 'ingest', stage: 'template-load', filePath }, fileError);
+        return { profiles: [], defaultProfileId: null, warnings: [`invalid_profile_file:${path.basename(filePath)}`] };
+    }
     const warnings: string[] = [];
 
     if (Array.isArray((parsed as RegistryFile).profiles)) {
@@ -277,6 +284,7 @@ export async function loadTemplateProfiles(): Promise<LoadedProfiles> {
         };
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+            logWarn('Template profile directory not found — skipping template filtering', { route: 'ingest', stage: 'template-load' });
             return {
                 profiles: [],
                 defaultProfileId: null,
@@ -284,7 +292,7 @@ export async function loadTemplateProfiles(): Promise<LoadedProfiles> {
             };
         }
 
-        logWarn('Failed loading template profiles', { route: 'ingest', stage: 'template-load' }, error);
+        logError('Failed loading template profiles', { route: 'ingest', stage: 'template-load' }, error);
         return {
             profiles: [],
             defaultProfileId: null,
