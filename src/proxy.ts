@@ -37,6 +37,7 @@ const CSP_DIRECTIVES = [
   "img-src 'self' data: blob: https:",
   "worker-src 'self' blob:",
   "connect-src 'self' https://*.supabase.co https://*.google.com https://*.anthropic.com https://*.cohere.com https://api.cohere.com https://*.upstash.io wss://*.supabase.co https://api.clerk.com https://*.clerk.accounts.dev https://*.clerk.dev",
+  "frame-src https://accounts.clerk.com https://*.clerk.accounts.dev",
   "frame-ancestors 'none'",
   "form-action 'self'",
   "base-uri 'self'",
