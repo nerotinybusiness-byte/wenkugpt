@@ -22,7 +22,8 @@ import { devLog, logError, logInfo } from '@/lib/logger';
 import { getRagV2Flags } from '@/lib/rag-v2/flags';
 import { runV2QueryFlow } from '@/lib/rag-v2/query-flow';
 import type { AmbiguityPayload, AmbiguityPolicy, ContextScope, InterpretationPayload } from '@/lib/rag-v2/types';
-export type { RAGEngineId } from '@/lib/settings/store';
+import type { RAGEngineId } from '@/lib/settings/store';
+export type { RAGEngineId };
 
 /**
  * Source chunk with citation ID
