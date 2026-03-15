@@ -264,13 +264,19 @@ async function handleRequest(request: NextRequest): Promise<NextResponse> {
   return applySecurityHeaders(response, requestId);
 }
 
-const clerkProxy = clerkMiddleware(async (auth, request) => {
-    const { pathname } = request.nextUrl;
-    if (!isPublicRoute(request) && !pathname.startsWith('/_next') && !pathname.startsWith('/static')) {
-        await auth.protect();
-    }
-    return handleRequest(request);
-});
+const clerkProxy = clerkMiddleware(
+    async (auth, request) => {
+        const { pathname } = request.nextUrl;
+        if (!isPublicRoute(request) && !pathname.startsWith('/_next') && !pathname.startsWith('/static')) {
+            await auth.protect();
+        }
+        return handleRequest(request);
+    },
+    {
+        publishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY,
+        secretKey: process.env.CLERK_SECRET_KEY,
+    },
+);
 
 export async function proxy(request: NextRequest, event: NextFetchEvent): Promise<NextResponse> {
     try {
