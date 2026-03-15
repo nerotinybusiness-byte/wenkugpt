@@ -8,7 +8,7 @@
  * Uses sliding window algorithm for fair limiting.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextFetchEvent, NextRequest, NextResponse } from 'next/server';
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
@@ -33,7 +33,7 @@ const CSP_DIRECTIVES = [
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob: https:",
   "worker-src 'self' blob:",
-  "connect-src 'self' https://*.supabase.co https://*.google.com https://*.anthropic.com https://*.cohere.com https://api.cohere.com https://*.upstash.io wss://*.supabase.co",
+  "connect-src 'self' https://*.supabase.co https://*.google.com https://*.anthropic.com https://*.cohere.com https://api.cohere.com https://*.upstash.io wss://*.supabase.co https://api.clerk.com https://*.clerk.accounts.dev https://*.clerk.dev",
   "frame-ancestors 'none'",
   "form-action 'self'",
   "base-uri 'self'",
@@ -264,13 +264,34 @@ async function handleRequest(request: NextRequest): Promise<NextResponse> {
   return applySecurityHeaders(response, requestId);
 }
 
-export const proxy = clerkMiddleware(async (auth, request) => {
+const clerkProxy = clerkMiddleware(async (auth, request) => {
     const { pathname } = request.nextUrl;
     if (!isPublicRoute(request) && !pathname.startsWith('/_next') && !pathname.startsWith('/static')) {
         await auth.protect();
     }
     return handleRequest(request);
 });
+
+export async function proxy(request: NextRequest, event: NextFetchEvent): Promise<NextResponse> {
+    try {
+        const result = await clerkProxy(request, event);
+        return result as NextResponse;
+    } catch (error) {
+        // Clerk handshake errors occur when session cookies are stale/mismatched.
+        // Clear Clerk cookies and redirect to sign-in to recover.
+        const isHandshakeError = error instanceof Error && error.message.includes('handshake');
+        if (isHandshakeError) {
+            const response = NextResponse.redirect(new URL('/sign-in', request.url));
+            for (const cookie of ['__clerk_handshake', '__session', '__client_uat']) {
+                response.cookies.delete(cookie);
+            }
+            return response;
+        }
+        // For other Clerk errors, fall through to the regular proxy (security headers still applied).
+        console.error('[WenkuGPT] Clerk middleware error:', error);
+        return handleRequest(request);
+    }
+}
 
 export const config = {
   matcher: [
