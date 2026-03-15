@@ -14,7 +14,7 @@ const IngestRequestSchema = z.object({
     skipEmbedding: z.boolean().default(false),
     templateProfileId: z.string().trim().min(1).max(128).optional(),
     emptyChunkOcrEnabled: z.boolean().optional(),
-    emptyChunkOcrEngine: z.any().optional(),
+    emptyChunkOcrEngine: z.enum(['gemini', 'tesseract']).optional(),
     folderName: z.string().optional(),
 });
 
@@ -72,11 +72,8 @@ export function parseIngestOptions(formData: FormData): {
         };
     }
 
-    return {
-        accessLevel: 'private',
-        skipEmbedding: false,
-        emptyChunkOcrEngine: 'gemini',
-    };
+    logWarn('Ingest legacy multipart validation failed — using defaults', { route: 'ingest', stage: 'options-parse-legacy', issues: validated.error.issues });
+    return { accessLevel: 'private', skipEmbedding: false, emptyChunkOcrEngine: 'gemini' };
 }
 
 function isPgColumnError(error: unknown): error is { code: string; message: string } {

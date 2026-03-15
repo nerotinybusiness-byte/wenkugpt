@@ -9,7 +9,7 @@ import {
 import type { AmbiguityPayload, AmbiguityPolicy, ContextScope, QueryFlowResult, ResolvedConcept } from './types';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateText } from 'ai';
-import { logError } from '@/lib/logger';
+import { logError, logWarn } from '@/lib/logger';
 
 interface QueryFlowInput {
   query: string;
@@ -132,7 +132,10 @@ function parseEffectiveAt(effectiveAt?: string): Date {
 
 async function classifyTermsWithLlm(query: string): Promise<string[]> {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!apiKey) return [];
+  if (!apiKey) {
+    logWarn('RAG v2 fallback classifier skipped: GOOGLE_GENERATIVE_AI_API_KEY not set', { route: 'rag-v2', stage: 'classifier' });
+    return [];
+  }
 
   let responseText: string;
   try {
@@ -431,13 +434,24 @@ export async function runV2QueryFlow(input: QueryFlowInput): Promise<QueryFlowRe
   const ambiguityPolicy = input.ambiguityPolicy ?? 'show_both';
 
   let candidateTerms = makeCandidateTerms(input.query);
-  let resolvedBundle = await resolveAliases(candidateTerms, contextScope, effectiveAt);
+  let resolvedBundle: Awaited<ReturnType<typeof resolveAliases>>;
+  try {
+    resolvedBundle = await resolveAliases(candidateTerms, contextScope, effectiveAt);
+  } catch (err) {
+    logError('RAG v2 resolveAliases failed (initial)', { route: 'rag-v2', stage: 'resolve-aliases' }, err);
+    resolvedBundle = { resolved: [], matches: [], unresolvedTerms: candidateTerms };
+  }
 
   if (resolvedBundle.resolved.length === 0 && input.rewriteEnabled) {
     const fallbackTerms = await classifyTermsWithLlm(input.query);
     if (fallbackTerms.length > 0) {
       candidateTerms = dedupe([...candidateTerms, ...fallbackTerms]);
-      resolvedBundle = await resolveAliases(candidateTerms, contextScope, effectiveAt);
+      try {
+        resolvedBundle = await resolveAliases(candidateTerms, contextScope, effectiveAt);
+      } catch (err) {
+        logError('RAG v2 resolveAliases failed (rewrite fallback)', { route: 'rag-v2', stage: 'resolve-aliases-rewrite' }, err);
+        resolvedBundle = { resolved: [], matches: [], unresolvedTerms: candidateTerms };
+      }
     }
   }
 
@@ -464,7 +478,12 @@ export async function runV2QueryFlow(input: QueryFlowInput): Promise<QueryFlowRe
   const graphStart = performance.now();
   if (input.graphEnabled) {
     const rewritten = buildInternalRewrite(input.query, resolvedBundle.resolved, contextScope, effectiveAt);
-    const graphHints = await expandGraphHints(resolvedBundle.resolved, contextScope, effectiveAt);
+    let graphHints: string[] = [];
+    try {
+      graphHints = await expandGraphHints(resolvedBundle.resolved, contextScope, effectiveAt);
+    } catch (err) {
+      logError('RAG v2 expandGraphHints failed', { route: 'rag-v2', stage: 'graph-hints' }, err);
+    }
     const graphSection = graphHints.length > 0
       ? `\n\n[GRAPH_RELATIONSHIPS]\n${graphHints.map((hint) => `- ${hint}`).join('\n')}`
       : '';

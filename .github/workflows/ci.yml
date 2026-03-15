@@ -42,3 +42,4 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: "stub-anon-key"
           CLERK_SECRET_KEY: "sk_test_stub"
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_stub"
+          GOOGLE_GENERATIVE_AI_API_KEY: "stub-key"

@@ -10,7 +10,7 @@ import { randomUUID } from 'crypto';
 import { processPipeline } from '@/lib/ingest/pipeline';
 import { requireAdmin } from '@/lib/auth/request-auth';
 import { apiError, apiSuccess } from '@/lib/api/response';
-import { getRequestId, logError, logWarn } from '@/lib/logger';
+import { getRequestId, logError } from '@/lib/logger';
 import { assertIngestSchemaHealth, isIngestSchemaHealthError } from '@/lib/db/schema-health';
 import { parseIngestOptions, mapIngestErrorMessage } from './ingest-utils';
 
@@ -85,6 +85,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             });
 
         if (uploadError) {
+            logError('Ingest storage upload failed', { route: 'ingest', requestId: getRequestId(request), filename: storageFilename }, uploadError);
             return apiError(
                 'INGEST_STORAGE_UPLOAD_FAILED',
                 `Storage Upload Failed: ${uploadError.message}`,
