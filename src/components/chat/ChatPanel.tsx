@@ -271,6 +271,9 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                     sources: msg.sources || undefined,
                 }));
                 setMessages(loadedMessages);
+            } else if (!payload.success) {
+                logError('Failed to load chat: API returned error', { chatId: id, error: payload.error });
+                setMessages([{ id: 'error', content: 'Nepodařilo se načíst konverzaci.', isUser: false }]);
             }
         } catch (error) {
             logError('Failed to load chat', {}, error);

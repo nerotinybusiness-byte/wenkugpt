@@ -64,6 +64,24 @@ describe('classifyChatError', () => {
     });
   });
 
+  describe('CHAT_UNEXPECTED — must NOT match on error.name "db"/"pool"', () => {
+    it('classifies error with name "DatabaseError" and unrelated message as unexpected', () => {
+      const e = new Error('unrelated application failure');
+      e.name = 'DatabaseError';
+      const result = classifyChatError(e);
+      expect(result.code).toBe('CHAT_UNEXPECTED');
+      expect(result.retryable).toBe(false);
+    });
+
+    it('classifies error with name "ConnectionPoolError" and unrelated message as unexpected', () => {
+      const e = new Error('something went wrong');
+      e.name = 'ConnectionPoolError';
+      const result = classifyChatError(e);
+      expect(result.code).toBe('CHAT_UNEXPECTED');
+      expect(result.retryable).toBe(false);
+    });
+  });
+
   describe('CHAT_UNEXPECTED', () => {
     it('classifies unknown error as unexpected', () => {
       const result = classifyChatError(new Error('some random application error'));
