@@ -25,7 +25,6 @@ import { ManageFilesDialog } from './ManageFilesDialog';
 import dynamic from 'next/dynamic';
 import { apiFetch } from '@/lib/api/client-request';
 import { devLog, logError } from '@/lib/logger';
-import { UserButton } from '@clerk/nextjs';
 
 const PDFViewer = dynamic(() => import('./PDFViewer'), {
     ssr: false,
@@ -683,7 +682,6 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
 
                     <div className="pointer-events-auto flex items-center gap-3 scale-75 origin-right">
                         <ThemeSwitcher />
-                        <UserButton />
                     </div>
                 </header>
 
