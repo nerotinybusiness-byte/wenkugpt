@@ -9,9 +9,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { createRequestId, logWarn } from '@/lib/logger';
+
+const isPublicRoute = createRouteMatcher([
+    '/sign-in(.*)',
+    '/sign-up(.*)',
+    '/api/health(.*)',
+]);
 
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
@@ -193,7 +200,7 @@ function shouldSkipRateLimit(pathname: string): boolean {
   return SKIP_RATE_LIMIT_PATHS.some(skip => pathname.startsWith(skip));
 }
 
-export async function proxy(request: NextRequest) {
+async function handleRequest(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith('/_next') || pathname.startsWith('/static')) {
@@ -256,6 +263,14 @@ export async function proxy(request: NextRequest) {
 
   return applySecurityHeaders(response, requestId);
 }
+
+export const proxy = clerkMiddleware(async (auth, request) => {
+    const { pathname } = request.nextUrl;
+    if (!isPublicRoute(request) && !pathname.startsWith('/_next') && !pathname.startsWith('/static')) {
+        await auth.protect();
+    }
+    return handleRequest(request);
+});
 
 export const config = {
   matcher: [
