@@ -7,6 +7,9 @@ interface DbUserRow {
     id: string;
     email: string;
     role: Role;
+    clerkId?: string | null;
+    name?: string | null;
+    imageUrl?: string | null;
 }
 
 function createDbMock(options?: { selectedRows?: DbUserRow[]; createdUser?: DbUserRow }) {
@@ -53,17 +56,21 @@ describe('request auth', () => {
         process.env = originalEnv;
     });
 
-    it('returns AUTH_UNAUTHORIZED when identity header is missing in production', async () => {
-        process.env = { ...process.env, NODE_ENV: 'production' };
+    it('returns AUTH_UNAUTHORIZED when Clerk session is absent', async () => {
+        process.env = { ...process.env, NODE_ENV: 'production', CLERK_SECRET_KEY: 'sk_test_xxx' };
         delete process.env.DEV_DEFAULT_USER_EMAIL;
         delete process.env.ADMIN_EMAILS;
 
-        const { db, mocks } = createDbMock();
+        const { db } = createDbMock();
         const eq = vi.fn((left: unknown, right: unknown) => ({ left, right }));
 
+        vi.doMock('@clerk/nextjs/server', () => ({
+            auth: vi.fn().mockResolvedValue({ userId: null }),
+            currentUser: vi.fn().mockResolvedValue(null),
+        }));
         vi.doMock('@/lib/db', () => ({ db }));
         vi.doMock('@/lib/db/schema', () => ({
-            users: { id: 'id', email: 'email', role: 'role', updatedAt: 'updatedAt' },
+            users: { id: 'id', email: 'email', role: 'role', clerkId: 'clerkId', name: 'name', imageUrl: 'imageUrl', updatedAt: 'updatedAt' },
         }));
         vi.doMock('drizzle-orm', () => ({ eq }));
 
@@ -72,45 +79,46 @@ describe('request auth', () => {
 
         const result = await requireUser(request);
         expect(result.ok).toBe(false);
-        if (result.ok) {
-            throw new Error('Expected auth to fail');
-        }
+        if (result.ok) throw new Error('Expected auth to fail');
 
         expect(result.response.status).toBe(401);
         const payload = await result.response.json();
         expect(payload).toMatchObject({
             success: false,
             code: 'AUTH_UNAUTHORIZED',
-            error: 'Missing identity header. Set x-user-email.',
         });
-        expect(mocks.selectLimit).not.toHaveBeenCalled();
     });
 
     it('returns AUTH_FORBIDDEN when authenticated user is not admin', async () => {
-        process.env = { ...process.env, NODE_ENV: 'production' };
+        process.env = { ...process.env, NODE_ENV: 'production', CLERK_SECRET_KEY: 'sk_test_xxx' };
         process.env.ADMIN_EMAILS = 'admin@example.com';
 
-        const { db, mocks } = createDbMock({
-            selectedRows: [{ id: 'user-1', email: 'member@example.com', role: 'user' }],
+        const { db } = createDbMock({
+            selectedRows: [{ id: 'user-1', email: 'member@example.com', role: 'user', clerkId: 'clerk_member' }],
         });
         const eq = vi.fn((left: unknown, right: unknown) => ({ left, right }));
 
+        vi.doMock('@clerk/nextjs/server', () => ({
+            auth: vi.fn().mockResolvedValue({ userId: 'clerk_member' }),
+            currentUser: vi.fn().mockResolvedValue({
+                id: 'clerk_member',
+                emailAddresses: [{ emailAddress: 'member@example.com' }],
+                fullName: 'Member',
+                imageUrl: null,
+            }),
+        }));
         vi.doMock('@/lib/db', () => ({ db }));
         vi.doMock('@/lib/db/schema', () => ({
-            users: { id: 'id', email: 'email', role: 'role', updatedAt: 'updatedAt' },
+            users: { id: 'id', email: 'email', role: 'role', clerkId: 'clerkId', name: 'name', imageUrl: 'imageUrl', updatedAt: 'updatedAt' },
         }));
         vi.doMock('drizzle-orm', () => ({ eq }));
 
         const { requireAdmin } = await import('@/lib/auth/request-auth');
-        const request = new NextRequest('http://localhost/api/documents', {
-            headers: { 'x-user-email': 'member@example.com' },
-        });
+        const request = new NextRequest('http://localhost/api/documents');
 
         const result = await requireAdmin(request);
         expect(result.ok).toBe(false);
-        if (result.ok) {
-            throw new Error('Expected admin auth to fail');
-        }
+        if (result.ok) throw new Error('Expected admin auth to fail');
 
         expect(result.response.status).toBe(403);
         const payload = await result.response.json();
@@ -119,34 +127,38 @@ describe('request auth', () => {
             code: 'AUTH_FORBIDDEN',
             error: 'Admin role is required for this endpoint.',
         });
-        expect(mocks.updateWhere).not.toHaveBeenCalled();
     });
 
     it('promotes allowlisted user to admin and passes requireAdmin', async () => {
-        process.env = { ...process.env, NODE_ENV: 'production' };
+        process.env = { ...process.env, NODE_ENV: 'production', CLERK_SECRET_KEY: 'sk_test_xxx' };
         process.env.ADMIN_EMAILS = 'admin@example.com';
 
         const { db, mocks } = createDbMock({
-            selectedRows: [{ id: 'user-2', email: 'admin@example.com', role: 'user' }],
+            selectedRows: [{ id: 'user-2', email: 'admin@example.com', role: 'user', clerkId: 'clerk_admin' }],
         });
         const eq = vi.fn((left: unknown, right: unknown) => ({ left, right }));
 
+        vi.doMock('@clerk/nextjs/server', () => ({
+            auth: vi.fn().mockResolvedValue({ userId: 'clerk_admin' }),
+            currentUser: vi.fn().mockResolvedValue({
+                id: 'clerk_admin',
+                emailAddresses: [{ emailAddress: 'admin@example.com' }],
+                fullName: 'Admin',
+                imageUrl: null,
+            }),
+        }));
         vi.doMock('@/lib/db', () => ({ db }));
         vi.doMock('@/lib/db/schema', () => ({
-            users: { id: 'id', email: 'email', role: 'role', updatedAt: 'updatedAt' },
+            users: { id: 'id', email: 'email', role: 'role', clerkId: 'clerkId', name: 'name', imageUrl: 'imageUrl', updatedAt: 'updatedAt' },
         }));
         vi.doMock('drizzle-orm', () => ({ eq }));
 
         const { requireAdmin } = await import('@/lib/auth/request-auth');
-        const request = new NextRequest('http://localhost/api/documents', {
-            headers: { 'x-user-email': 'admin@example.com' },
-        });
+        const request = new NextRequest('http://localhost/api/documents');
 
         const result = await requireAdmin(request);
         expect(result.ok).toBe(true);
-        if (!result.ok) {
-            throw new Error('Expected admin auth to pass');
-        }
+        if (!result.ok) throw new Error('Expected admin auth to pass');
 
         expect(result.user.email).toBe('admin@example.com');
         expect(result.user.role).toBe('admin');

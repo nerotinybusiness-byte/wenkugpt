@@ -80,7 +80,7 @@ BEGIN
     c.parent_header,
     c.document_id,
     (1 - (c.embedding <=> query_embedding))::float as similarity,
-    ts_rank(c.fts_vector, plainto_tsquery('simple', query_text))::float as fts_rank,
+    ts_rank(c.fts_vector, plainto_tsquery('czech', query_text))::float as fts_rank,
     similarity(c.content, query_text)::float as trgm_score
   FROM chunks c
   WHERE 
@@ -91,7 +91,7 @@ BEGIN
     )
   ORDER BY 
     (1 - (c.embedding <=> query_embedding)) * 0.6 + 
-    ts_rank(c.fts_vector, plainto_tsquery('simple', query_text)) * 0.25 +
+    ts_rank(c.fts_vector, plainto_tsquery('czech', query_text)) * 0.25 +
     similarity(c.content, query_text) * 0.15 DESC
   LIMIT match_count;
 END;
@@ -99,13 +99,13 @@ $$;
 
 -- ============================================================================
 -- HELPER: Update FTS vector on chunk insert/update
--- Uses 'simple' config instead of 'czech' for broader compatibility
+-- Uses 'czech' config for proper Czech stemming and stop-word handling
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION update_chunk_fts_vector()
 RETURNS TRIGGER AS $$
 BEGIN
-  NEW.fts_vector := to_tsvector('simple', COALESCE(NEW.content, ''));
+  NEW.fts_vector := to_tsvector('czech', COALESCE(NEW.content, ''));
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

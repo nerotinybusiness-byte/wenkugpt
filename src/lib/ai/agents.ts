@@ -14,7 +14,7 @@ import { rerankResults, DEFAULT_RERANKER_CONFIG } from './reranker';
 import { lookupCache, storeInCache } from './cache';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createAnthropic } from '@ai-sdk/anthropic';
-import { generateText } from 'ai';
+import { generateText, streamText } from 'ai';
 import { db } from '@/lib/db';
 import { documents } from '@/lib/db/schema';
 import type { Citation } from '@/lib/db/schema';
@@ -755,6 +755,166 @@ export async function executeRAG(
             mode: 'compat',
         },
     };
+}
+
+/**
+ * Execute the RAG pipeline with token-by-token streaming.
+ *
+ * Protocol (line-based, UTF-8):
+ *   __SOURCES__:{json}\n  — source metadata (sent before generation)
+ *   <raw text>             — generator tokens
+ *   __DONE__:{json}\n      — verification result + stats + chatId
+ *   __ERROR__:{json}\n     — error envelope
+ *
+ * @returns ReadableStream<Uint8Array>
+ */
+export function executeRAGStreamed(
+    query: string,
+    config: RAGConfig = DEFAULT_RAG_CONFIG,
+): ReadableStream<Uint8Array> {
+    const encoder = new TextEncoder();
+
+    return new ReadableStream<Uint8Array>({
+        async start(controller) {
+            const startTime = performance.now();
+
+            try {
+                // ── Cache check ──────────────────────────────────────────
+                const cached = await lookupCache(query);
+                if (cached) {
+                    const cachedCitations = cached.citations || [];
+                    const sources: SourceChunk[] = await Promise.all(
+                        cachedCitations.map(async (c, index) => {
+                            const chunk = await getChunkById(c.chunkId);
+                            return {
+                                citationId: c.id || String(index + 1),
+                                chunkId: c.chunkId,
+                                documentId: chunk?.documentId || '',
+                                content: chunk?.content || '',
+                                pageNumber: chunk?.pageNumber || c.page,
+                                boundingBox: chunk?.boundingBox || null,
+                                parentHeader: chunk?.parentHeader || null,
+                                filename: chunk?.filename,
+                                relevanceScore: c.confidence,
+                            };
+                        }),
+                    );
+
+                    controller.enqueue(encoder.encode(`__SOURCES__:${JSON.stringify(sources.map(s => ({
+                        id: s.citationId, chunkId: s.chunkId, documentId: s.documentId,
+                        content: s.content.slice(0, 200) + '...', pageNumber: s.pageNumber,
+                        boundingBox: s.boundingBox, parentHeader: s.parentHeader,
+                        filename: s.filename, relevanceScore: s.relevanceScore,
+                    })))}\n`));
+
+                    controller.enqueue(encoder.encode(cached.answerText));
+
+                    controller.enqueue(encoder.encode(`\n__DONE__:${JSON.stringify({
+                        verified: true,
+                        confidence: cached.confidence,
+                        stats: {
+                            retrievalTimeMs: 0, generationTimeMs: 0, verificationTimeMs: 0,
+                            totalTimeMs: performance.now() - startTime, chunksRetrieved: 0, chunksUsed: sources.length,
+                        },
+                    })}\n`));
+                    controller.close();
+                    return;
+                }
+
+                // ── Agent 1: Retriever ───────────────────────────────────
+                const { sources, timeMs: retrievalTimeMs } = await agentRetriever(query, config);
+
+                // Empty DB / no results early-exit
+                if (sources.length === 0) {
+                    let emptyMsg: string;
+                    try {
+                        const docs = await db.select().from(documents).limit(1);
+                        emptyMsg = docs.length === 0
+                            ? 'Aktuálně nemám k dispozici žádné dokumenty. Prosím nahrajte soubory v sekci "Manage Files", abych mohl odpovídat na vaše dotazy.'
+                            : 'Tuto informaci v dokumentaci nemám.';
+                    } catch {
+                        emptyMsg = 'Tuto informaci v dokumentaci nemám.';
+                    }
+
+                    controller.enqueue(encoder.encode(`__SOURCES__:${JSON.stringify([])}\n`));
+                    controller.enqueue(encoder.encode(emptyMsg));
+                    controller.enqueue(encoder.encode(`\n__DONE__:${JSON.stringify({
+                        verified: true, confidence: 1.0,
+                        stats: {
+                            retrievalTimeMs, generationTimeMs: 0, verificationTimeMs: 0,
+                            totalTimeMs: performance.now() - startTime, chunksRetrieved: 0, chunksUsed: 0,
+                        },
+                    })}\n`));
+                    controller.close();
+                    return;
+                }
+
+                // Send sources before generation starts
+                controller.enqueue(encoder.encode(`__SOURCES__:${JSON.stringify(sources.map(s => ({
+                    id: s.citationId, chunkId: s.chunkId, documentId: s.documentId,
+                    content: s.content.slice(0, 200) + '...', pageNumber: s.pageNumber,
+                    boundingBox: s.boundingBox, parentHeader: s.parentHeader,
+                    filename: s.filename, relevanceScore: s.relevanceScore,
+                })))}\n`));
+
+                // ── Agent 2: Generator (streamed) ────────────────────────
+                const genStart = performance.now();
+                const context = buildTruncatedContext(sources);
+
+                const google = createGoogleGenerativeAI({
+                    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+                });
+
+                const streamResult = streamText({
+                    model: google(config.generatorModel),
+                    system: GENERATOR_SYSTEM_PROMPT,
+                    prompt: `ZDROJE:\n${context}\n\n---\n\nOTÁZKA: ${query}`,
+                    temperature: config.temperature,
+                });
+
+                let fullText = '';
+                for await (const chunk of streamResult.textStream) {
+                    fullText += chunk;
+                    controller.enqueue(encoder.encode(chunk));
+                }
+                const generationTimeMs = performance.now() - genStart;
+
+                // ── Agent 3: Auditor (sync) ──────────────────────────────
+                const audit = await agentAuditor(fullText, sources, config);
+
+                const finalResponse = audit.removedClaims.length > 0
+                    ? audit.correctedResponse
+                    : fullText;
+
+                // Cache store
+                if (audit.verified && audit.confidence >= config.confidenceThreshold) {
+                    const citations: Citation[] = sources.map((s) => ({
+                        id: s.citationId, chunkId: s.chunkId,
+                        page: s.pageNumber, confidence: s.relevanceScore,
+                    }));
+                    await storeInCache(query, finalResponse, citations, audit.confidence, sources.map(s => s.chunkId));
+                }
+
+                controller.enqueue(encoder.encode(`\n__DONE__:${JSON.stringify({
+                    verified: audit.verified,
+                    confidence: audit.confidence,
+                    correctedResponse: audit.removedClaims.length > 0 ? audit.correctedResponse : undefined,
+                    stats: {
+                        retrievalTimeMs, generationTimeMs, verificationTimeMs: audit.timeMs,
+                        totalTimeMs: performance.now() - startTime,
+                        chunksRetrieved: sources.length, chunksUsed: sources.length,
+                    },
+                })}\n`));
+
+                controller.close();
+            } catch (error) {
+                logError('Streamed RAG error', { route: 'rag', stage: 'stream' }, error);
+                const msg = error instanceof Error ? error.message : 'Internal error';
+                controller.enqueue(encoder.encode(`\n__ERROR__:${JSON.stringify({ error: msg })}\n`));
+                controller.close();
+            }
+        },
+    });
 }
 
 /**

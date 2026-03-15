@@ -198,7 +198,6 @@ interface PDFParseInstance {
 
 interface PDFParseClass {
     new (options: { data: Uint8Array }): PDFParseInstance;
-    setWorker(workerSrc: string): void;
 }
 
 interface PDFParseModule {
@@ -286,8 +285,9 @@ export async function parsePDF(buffer: Buffer | Uint8Array): Promise<ParsedDocum
         throw new Error('pdf-parse did not expose PDFParse class');
     }
 
-    // Configure fake worker for Node.js environment by preloading WorkerMessageHandler.
-    // This avoids runtime filesystem resolution of "./pdf.worker.mjs" in serverless bundles.
+    // Pre-load the PDF.js worker module into `globalThis.pdfjsWorker`.
+    // pdfjs-dist v5+ reads this value internally to obtain WorkerMessageHandler,
+    // avoiding runtime filesystem resolution of "./pdf.worker.mjs" in serverless bundles.
     if (typeof window === 'undefined') {
         const runtime = globalThis as Record<string, unknown>;
         try {
@@ -296,8 +296,8 @@ export async function parsePDF(buffer: Buffer | Uint8Array): Promise<ParsedDocum
                 const workerModule = await import('pdfjs-dist/legacy/build/pdf.worker.mjs');
                 runtime.pdfjsWorker = workerModule;
             }
-        } catch {
-            // Keep pdf-parse default worker configuration as fallback.
+        } catch (err) {
+            console.warn('[parsePDF] Failed to pre-load pdfjs worker, falling back to default:', err);
         }
     }
 

@@ -25,6 +25,7 @@ import { ManageFilesDialog } from './ManageFilesDialog';
 import dynamic from 'next/dynamic';
 import { apiFetch } from '@/lib/api/client-request';
 import { devLog, logError } from '@/lib/logger';
+import { UserButton } from '@clerk/nextjs';
 
 const PDFViewer = dynamic(() => import('./PDFViewer'), {
     ssr: false,
@@ -344,46 +345,21 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                 confidenceThreshold: settings.confidenceThreshold,
             };
 
-            let data: ChatPostResponseData | null = null;
+            let response: Response | null = null;
 
             for (let attempt = 1; attempt <= CHAT_CLIENT_MAX_ATTEMPTS; attempt += 1) {
                 try {
-                    const response = await apiFetch('/api/chat', {
+                    response = await apiFetch('/api/chat', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             query,
                             settings: settingsPayload,
                             chatId: currentChatId,
+                            stream: true,
                         }),
                         signal: abortControllerRef.current?.signal,
                     });
-
-                    const payload = await response.json() as ApiResponse<ChatPostResponseData>;
-
-                    if (!payload.success) {
-                        const requestId = extractRequestIdFromErrorPayload(payload, response);
-                        const retryable = isRetryableApiFailure(payload.code, response.status);
-
-                        logError('Chat API error', {
-                            code: payload.code,
-                            status: response.status,
-                            requestId,
-                            details: payload.details,
-                        });
-
-                        const canRetry = retryable && attempt < CHAT_CLIENT_MAX_ATTEMPTS;
-                        if (canRetry) {
-                            await delay(CHAT_CLIENT_RETRY_DELAY_MS);
-                            continue;
-                        }
-
-                        const apiError = new Error(FRIENDLY_CHAT_ERROR_CS) as Error & { requestId?: string };
-                        apiError.requestId = requestId;
-                        throw apiError;
-                    }
-
-                    data = payload.data;
                     break;
                 } catch (requestError) {
                     const isAbortError = requestError instanceof Error && requestError.name === 'AbortError';
@@ -403,43 +379,104 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                 }
             }
 
-            if (!data) {
+            if (!response) {
                 throw new Error(FRIENDLY_CHAT_ERROR_CS);
             }
 
-            // Update Chat ID if new session started
-            if (data.chatId && data.chatId !== currentChatId) {
-                setChatId(data.chatId);
+            // Update Chat ID from header
+            const headerChatId = response.headers.get('X-Chat-Id');
+            if (headerChatId && headerChatId !== currentChatId) {
+                setChatId(headerChatId);
             }
 
-            // Update messages with real response
+            if (!response.body) {
+                throw new Error('No response body');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let streamedText = '';
+            let streamSources: Source[] | undefined;
+            const messageId = `ai-${Date.now()}`;
+
+            // Replace loading message with empty AI message
             setMessages(prev => {
                 const newMessages = [...prev];
-                // Remove loading message
-                newMessages.pop();
-
-                // Add AI response
+                newMessages.pop(); // Remove loading
                 newMessages.push({
-                    id: `ai-${Date.now()}`,
-                    content: data.response,
+                    id: messageId,
+                    content: '',
                     isUser: false,
-                    sources: data.sources,
-                    verified: data.verified,
-                    confidence: data.confidence,
-                    degraded: data.degraded === true,
                 });
-
-                // Update usage stats in store
-                if (data.stats) {
-                    setLastStats(data.stats);
-                }
-
                 return newMessages;
             });
 
-            if (data.sources && onSourcesChange) onSourcesChange(data.sources);
-            if (data.requestId) {
-                devLog('Chat response requestId', data.requestId);
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                // Process complete lines
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                    if (line.startsWith('__SOURCES__:')) {
+                        const json = line.slice('__SOURCES__:'.length);
+                        streamSources = JSON.parse(json);
+                        if (streamSources && onSourcesChange) onSourcesChange(streamSources);
+                    } else if (line.startsWith('__DONE__:')) {
+                        const json = line.slice('__DONE__:'.length);
+                        const doneData = JSON.parse(json) as {
+                            verified: boolean;
+                            confidence: number;
+                            correctedResponse?: string;
+                            stats?: SettingsState['lastStats'];
+                            requestId?: string;
+                        };
+
+                        const finalContent = doneData.correctedResponse || streamedText;
+
+                        setMessages(prev => prev.map(m =>
+                            m.id === messageId
+                                ? { ...m, content: finalContent, sources: streamSources, verified: doneData.verified, confidence: doneData.confidence }
+                                : m
+                        ));
+
+                        if (doneData.stats) {
+                            setLastStats(doneData.stats);
+                        }
+
+                        if (doneData.requestId) {
+                            devLog('Chat response requestId', doneData.requestId);
+                        }
+                    } else if (line.startsWith('__ERROR__:')) {
+                        const json = line.slice('__ERROR__:'.length);
+                        const errData = JSON.parse(json) as { error: string };
+                        throw new Error(errData.error);
+                    } else {
+                        // Raw text token
+                        streamedText += line;
+                        const currentText = streamedText;
+                        setMessages(prev => prev.map(m =>
+                            m.id === messageId ? { ...m, content: currentText } : m
+                        ));
+                    }
+                }
+            }
+
+            // Process any remaining buffer
+            if (buffer.trim()) {
+                if (buffer.startsWith('__DONE__:') || buffer.startsWith('__ERROR__:') || buffer.startsWith('__SOURCES__:')) {
+                    // Protocol line in remaining buffer - handled above
+                } else {
+                    streamedText += buffer;
+                    setMessages(prev => prev.map(m =>
+                        m.id === messageId ? { ...m, content: streamedText } : m
+                    ));
+                }
             }
 
 
@@ -685,8 +722,9 @@ export default function ChatPanel({ onCitationClick, onSourcesChange }: ChatPane
                     {/* Spacer/Title placeholder if needed */}
                     <div />
 
-                    <div className="pointer-events-auto flex items-center justify-center scale-75 origin-right">
+                    <div className="pointer-events-auto flex items-center gap-3 scale-75 origin-right">
                         <ThemeSwitcher />
+                        <UserButton />
                     </div>
                 </header>
 

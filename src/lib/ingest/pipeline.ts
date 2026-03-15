@@ -508,10 +508,10 @@ export async function processPipeline(
                         tokenCount: chunk.tokenCount,
                         accessLevel,
                         isTemplateBoilerplate,
-                        // Generate simple full-text search vector (Czech dict not available).
+                        // Generate Czech full-text search vector
                         ftsVector: isTemplateBoilerplate
                             ? null
-                            : sql`to_tsvector('simple', ${chunk.text})`,
+                            : sql`to_tsvector('czech', ${chunk.text})`,
                     };
                 });
                 const documentFinalStatus = chunkRecords.filter(r => !r.isTemplateBoilerplate).length > 0

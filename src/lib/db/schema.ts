@@ -72,6 +72,7 @@ export type ReviewDecision = 'approved' | 'rejected' | 'needs_changes';
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
+  clerkId: varchar('clerk_id', { length: 256 }).unique(),
   email: varchar('email', { length: 320 }).unique().notNull(),
   name: varchar('name', { length: 256 }),
   imageUrl: varchar('image_url', { length: 2048 }),

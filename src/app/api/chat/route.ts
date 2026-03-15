@@ -7,8 +7,9 @@
 
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
-import { executeRAG, type RAGConfig, type RAGEngineId } from '@/lib/ai/agents';
+import { executeRAG, executeRAGStreamed, type RAGConfig, type RAGEngineId } from '@/lib/ai/agents';
 import { requireUser } from '@/lib/auth/request-auth';
+import { checkUserRateLimit } from '@/lib/auth/rate-limit';
 import { getRequestId, logError, logInfo, logWarn } from '@/lib/logger';
 import type { MessageSource } from '@/lib/db/schema';
 import { apiError, apiSuccess } from '@/lib/api/response';
@@ -26,6 +27,8 @@ const DEFAULT_RAG_ENGINE: RAGEngineId = 'v2';
 const DEFAULT_AMBIGUITY_POLICY: AmbiguityPolicy = 'show_both';
 const SUPPORTED_GENERATOR_MODELS = new Set([
     'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'gemini-2.0-flash',
 ]);
 const SUPPORTED_RAG_ENGINES = new Set<RAGEngineId>([
     'v1',
@@ -130,6 +133,7 @@ const ChatRequestSchema = z.object({
         confidenceThreshold: z.number().optional(),
     }).optional(),
     chatId: z.string().uuid().nullish(),
+    stream: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -138,6 +142,15 @@ export async function POST(request: NextRequest) {
         const auth = await requireUser(request);
         if (!auth.ok) return withRequestId(auth.response, requestId);
         const userId = auth.user.id;
+
+        // Per-user rate limit (50/day)
+        const rateLimit = await checkUserRateLimit(userId);
+        if (!rateLimit.ok) {
+            const resp = apiError('RATE_LIMIT_EXCEEDED', 'Daily query limit exceeded. Try again later.', 429);
+            resp.headers.set('X-RateLimit-Remaining', '0');
+            resp.headers.set('X-RateLimit-Reset', rateLimit.resetsAt.toISOString());
+            return resp;
+        }
 
         const body = await request.json();
         const parsed = ChatRequestSchema.safeParse(body);
@@ -215,6 +228,53 @@ export async function POST(request: NextRequest) {
             skipVerification: settings?.enableAuditor === false,
         };
 
+        // ── Streaming path ───────────────────────────────────────
+        if (parsed.data.stream) {
+            const ragStream = executeRAGStreamed(query, ragConfig as RAGConfig);
+
+            // Wrap in a TransformStream that accumulates text for DB save
+            let accumulatedText = '';
+            const transform = new TransformStream<Uint8Array, Uint8Array>({
+                transform(chunk, ctrl) {
+                    const text = new TextDecoder().decode(chunk);
+                    // Accumulate only raw text (not protocol lines)
+                    for (const line of text.split('\n')) {
+                        if (!line.startsWith('__SOURCES__:') && !line.startsWith('__DONE__:') && !line.startsWith('__ERROR__:')) {
+                            accumulatedText += line;
+                        }
+                    }
+                    ctrl.enqueue(chunk);
+                },
+                async flush() {
+                    // Save assistant message after stream ends
+                    if (accumulatedText.trim()) {
+                        try {
+                            await db.insert(messages).values({
+                                chatId: chatId!,
+                                role: 'assistant',
+                                content: accumulatedText,
+                            });
+                        } catch (e) {
+                            logError('Failed to save streamed message', { route: '/api/chat' }, e);
+                        }
+                    }
+                },
+            });
+
+            const outStream = ragStream.pipeThrough(transform);
+
+            return new Response(outStream, {
+                headers: {
+                    'Content-Type': 'text/event-stream',
+                    'Cache-Control': 'no-cache',
+                    'X-Chat-Id': chatId!,
+                    'X-RateLimit-Remaining': String(rateLimit.remaining),
+                    'X-RateLimit-Reset': rateLimit.resetsAt.toISOString(),
+                },
+            });
+        }
+
+        // ── Non-streaming path with retry + degraded fallback ────
         let ragResponse: Awaited<ReturnType<typeof executeRAG>> | null = null;
         let errorCode: string | undefined;
         let fallbackMessage = FALLBACK_RESPONSE_CS;
@@ -327,7 +387,10 @@ export async function POST(request: NextRequest) {
                 errorCode: degradedResponse.errorCode,
             });
 
-            return withRequestId(apiSuccess(degradedResponse), requestId);
+            const degradedResp = apiSuccess(degradedResponse);
+            degradedResp.headers.set('X-RateLimit-Remaining', String(rateLimit.remaining));
+            degradedResp.headers.set('X-RateLimit-Reset', rateLimit.resetsAt.toISOString());
+            return withRequestId(degradedResp, requestId);
         }
 
         await db.insert(messages).values({
@@ -347,7 +410,7 @@ export async function POST(request: NextRequest) {
             })),
         });
 
-        return withRequestId(apiSuccess({
+        const resp = apiSuccess({
             chatId,
             response: ragResponse.response,
             sources: ragResponse.sources.map((s) => ({
@@ -372,7 +435,10 @@ export async function POST(request: NextRequest) {
             engineMeta: ragResponse.engineMeta,
             degraded: false,
             requestId,
-        }), requestId);
+        });
+        resp.headers.set('X-RateLimit-Remaining', String(rateLimit.remaining));
+        resp.headers.set('X-RateLimit-Reset', rateLimit.resetsAt.toISOString());
+        return withRequestId(resp, requestId);
     } catch (error) {
         const classified = classifyChatError(error);
         logError(
