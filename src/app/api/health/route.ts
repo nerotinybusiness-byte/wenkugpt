@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const durationMs = Date.now() - start;
     const requestId = getRequestId(request);
-    logWarn('Health check degraded', { route: '/api/health', requestId, durationMs }, error);
+    logWarn('Health check degraded', { route: 'health', requestId, durationMs }, error);
     return apiError(
       'HEALTH_DB_DEGRADED',
       'Database connectivity check failed',

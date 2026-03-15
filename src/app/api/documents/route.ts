@@ -44,13 +44,26 @@ export async function GET(request: NextRequest) {
                 fileSize: doc.fileSize,
                 pageCount: doc.pageCount,
                 processingStatus: doc.processingStatus,
+                processingError: doc.processingError,
+                folderName: doc.folderName,
+                templateProfileId: doc.templateProfileId,
+                templateMatched: doc.templateMatched,
+                templateMatchScore: doc.templateMatchScore,
+                templateBoilerplateChunks: doc.templateBoilerplateChunks,
+                templateDetectionMode: doc.templateDetectionMode,
+                templateWarnings: doc.templateWarnings,
+                ocrRescueApplied: doc.ocrRescueApplied,
+                ocrRescueEngine: doc.ocrRescueEngine,
+                ocrRescueFallbackEngine: doc.ocrRescueFallbackEngine,
+                ocrRescueChunksRecovered: doc.ocrRescueChunksRecovered,
+                ocrRescueWarnings: doc.ocrRescueWarnings,
                 createdAt: doc.createdAt,
             })),
             nextCursor: hasNextPage ? items[items.length - 1].createdAt : null,
         });
     } catch (error) {
         const requestId = getRequestId(request);
-        logError('Documents GET error', { route: '/api/documents', requestId }, error);
+        logError('Documents GET error', { route: 'documents', requestId }, error);
         return apiError('DOCUMENTS_FETCH_FAILED', 'Failed to fetch documents', 500);
     }
 }

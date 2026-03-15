@@ -1,16 +1,43 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { FileText, Trash2, CheckCircle, Loader2, AlertCircle, Eye, X, CheckSquare, Square, RefreshCw, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useTheme } from 'next-themes';
+import {
+    AlertCircle,
+    CheckCircle,
+    CheckSquare,
+    Eye,
+    FileText,
+    Loader2,
+    RefreshCw,
+    Search,
+    Square,
+    Trash2,
+    X,
+} from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/lib/api/client-request';
 
-interface Document {
+interface DocumentItem {
     id: string;
     filename: string;
     fileSize: number;
     pageCount: number;
     processingStatus: 'completed' | 'processing' | 'failed';
+    processingError?: string | null;
+    folderName?: string | null;
+    templateProfileId?: string | null;
+    templateMatched?: boolean;
+    templateMatchScore?: number | null;
+    templateBoilerplateChunks?: number;
+    templateDetectionMode?: string | null;
+    templateWarnings?: string[] | null;
+    ocrRescueApplied?: boolean;
+    ocrRescueEngine?: string | null;
+    ocrRescueFallbackEngine?: string | null;
+    ocrRescueChunksRecovered?: number;
+    ocrRescueWarnings?: string[] | null;
     createdAt: string;
 }
 
@@ -41,22 +68,38 @@ function toDisplayFilename(filename: string): string {
     return match?.[1] ?? filename;
 }
 
+function formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+function formatDate(dateString: string): string {
+    return new Date(dateString).toLocaleDateString();
+}
+
 export default function FileList({ refreshTrigger = 0 }: FileListProps) {
-    const [documents, setDocuments] = useState<Document[]>([]);
+    const { resolvedTheme } = useTheme();
+    const isDark = resolvedTheme !== 'light';
+    const [documents, setDocuments] = useState<DocumentItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
     const [searchQuery, setSearchQuery] = useState('');
+    const [folderFilter, setFolderFilter] = useState('__all__');
+    const [bulkFolderName, setBulkFolderName] = useState('');
+    const [isUpdatingFolders, setIsUpdatingFolders] = useState(false);
 
-    // Preview state
     const [previewDoc, setPreviewDoc] = useState<{ id: string; filename: string } | null>(null);
-    const [previewContent, setPreviewContent] = useState<string>('');
+    const [previewContent, setPreviewContent] = useState('');
     const [loadingPreview, setLoadingPreview] = useState(false);
 
     const fetchDocuments = async () => {
         try {
             const response = await apiFetch('/api/documents', { cache: 'no-store' });
-            const payload = await response.json() as ApiResponse<{ documents: Document[] }>;
+            const payload = await response.json() as ApiResponse<{ documents: DocumentItem[] }>;
             if (payload.success) {
                 setDocuments(payload.data.documents);
             }
@@ -68,62 +111,75 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
     };
 
     useEffect(() => {
-        fetchDocuments();
+        void fetchDocuments();
     }, [refreshTrigger]);
 
-    // Smart Polling Logic
     useEffect(() => {
         let intervalTime: number | null = null;
 
-        const hasProcessingDocs = documents.some(doc => doc.processingStatus === 'processing');
+        const hasProcessingDocs = documents.some((doc) => doc.processingStatus === 'processing');
         const isEmpty = documents.length === 0;
 
         if (hasProcessingDocs) {
-            // Processing: Poll fast (3s) to show progress
             intervalTime = 3000;
         } else if (isEmpty) {
-            // Empty: Poll medium (5s) to recover from potential server startup issues
             intervalTime = 5000;
         }
-        // If has documents and none are processing -> Don't poll (stable state)
 
         if (intervalTime) {
-            const timer = setInterval(fetchDocuments, intervalTime);
+            const timer = setInterval(() => {
+                void fetchDocuments();
+            }, intervalTime);
             return () => clearInterval(timer);
         }
+
+        return undefined;
     }, [documents]);
+
+    const folderOptions = Array.from(
+        new Set(
+            documents
+                .map((doc) => doc.folderName?.trim() || '')
+                .filter((folderName) => folderName.length > 0),
+        ),
+    ).sort((a, b) => a.localeCompare(b, 'cs'));
 
     const filteredDocuments = documents.filter((doc) => {
         const normalizedQuery = searchQuery.toLowerCase();
         const displayFilename = toDisplayFilename(doc.filename).toLowerCase();
         const rawFilename = doc.filename.toLowerCase();
+        const folderName = doc.folderName?.trim() || '';
+        const folderMatch = folderFilter === '__all__'
+            ? true
+            : folderFilter === '__unsorted__'
+                ? folderName.length === 0
+                : folderName === folderFilter;
+
+        if (!folderMatch) return false;
         return displayFilename.includes(normalizedQuery) || rawFilename.includes(normalizedQuery);
     });
 
     const toggleSelect = (id: string) => {
-        const newSelected = new Set(selectedIds);
-        if (newSelected.has(id)) {
-            newSelected.delete(id);
-        } else {
-            newSelected.add(id);
-        }
-        setSelectedIds(newSelected);
+        const next = new Set(selectedIds);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        setSelectedIds(next);
     };
 
     const toggleSelectAll = () => {
         if (selectedIds.size === filteredDocuments.length && filteredDocuments.length > 0) {
             setSelectedIds(new Set());
-        } else {
-            setSelectedIds(new Set(filteredDocuments.map(d => d.id)));
+            return;
         }
+        setSelectedIds(new Set(filteredDocuments.map((doc) => doc.id)));
     };
 
     const handleDelete = async (ids: string[]) => {
         if (!confirm(`Are you sure you want to delete ${ids.length} document(s)?`)) return;
 
-        const newDeletingIds = new Set(deletingIds);
-        ids.forEach(id => newDeletingIds.add(id));
-        setDeletingIds(newDeletingIds);
+        const nextDeleting = new Set(deletingIds);
+        ids.forEach((id) => nextDeleting.add(id));
+        setDeletingIds(nextDeleting);
 
         try {
             const deletionResults = await Promise.all(
@@ -131,17 +187,16 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                     const response = await apiFetch(`/api/documents/${id}`, { method: 'DELETE' });
                     const payload = await response.json() as ApiResponse<{ id: string }>;
                     return { id, ok: payload.success };
-                })
+                }),
             );
 
-            const failed = deletionResults.filter((r) => !r.ok).map((r) => r.id);
-            const succeeded = deletionResults.filter((r) => r.ok).map((r) => r.id);
+            const failed = deletionResults.filter((row) => !row.ok).map((row) => row.id);
+            const succeeded = deletionResults.filter((row) => row.ok).map((row) => row.id);
 
-            // Remove from local state
-            setDocuments(prev => prev.filter(doc => !succeeded.includes(doc.id)));
-            setSelectedIds(prev => {
+            setDocuments((prev) => prev.filter((doc) => !succeeded.includes(doc.id)));
+            setSelectedIds((prev) => {
                 const next = new Set(prev);
-                succeeded.forEach(id => next.delete(id));
+                succeeded.forEach((id) => next.delete(id));
                 return next;
             });
 
@@ -152,16 +207,59 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
             console.error('Error deleting documents:', error);
             alert('Error deleting some documents');
         } finally {
-            // Clear deleting status
-            setDeletingIds(prev => {
+            setDeletingIds((prev) => {
                 const next = new Set(prev);
-                ids.forEach(id => next.delete(id));
+                ids.forEach((id) => next.delete(id));
                 return next;
             });
         }
     };
 
-    const openPreview = async (doc: Document) => {
+    const handleBulkFolderUpdate = async (nextFolderName: string | null) => {
+        const ids = Array.from(selectedIds);
+        if (ids.length === 0 || isUpdatingFolders) return;
+
+        setIsUpdatingFolders(true);
+        try {
+            const updates = await Promise.all(
+                ids.map(async (id) => {
+                    const response = await apiFetch(`/api/documents/${id}`, {
+                        method: 'PATCH',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify({ folderName: nextFolderName }),
+                    });
+                    const payload = await response.json() as ApiResponse<{ id: string; folderName: string | null }>;
+                    return {
+                        id,
+                        ok: payload.success,
+                        folderName: payload.success ? payload.data.folderName : null,
+                    };
+                }),
+            );
+
+            const failed = updates.filter((row) => !row.ok);
+            const succeeded = updates.filter((row) => row.ok);
+            if (failed.length > 0) {
+                alert(`Failed to update folder for ${failed.length} document(s).`);
+            }
+
+            if (succeeded.length > 0) {
+                const nextById = new Map(succeeded.map((row) => [row.id, row.folderName]));
+                setDocuments((prev) => prev.map((doc) => (
+                    nextById.has(doc.id)
+                        ? { ...doc, folderName: nextById.get(doc.id) ?? null }
+                        : doc
+                )));
+            }
+        } catch (error) {
+            console.error('Error updating folders:', error);
+            alert('Error updating selected document folders');
+        } finally {
+            setIsUpdatingFolders(false);
+        }
+    };
+
+    const openPreview = async (doc: DocumentItem) => {
         setPreviewDoc({ id: doc.id, filename: toDisplayFilename(doc.filename) });
         setLoadingPreview(true);
         setPreviewContent('');
@@ -169,7 +267,6 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
         try {
             const response = await apiFetch(`/api/documents/${doc.id}/preview`);
             const payload = await response.json() as ApiResponse<{ content: string }>;
-
             if (payload.success) {
                 setPreviewContent(payload.data.content);
             } else {
@@ -187,29 +284,19 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
         setPreviewContent('');
     };
 
-    const formatBytes = (bytes: number) => {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
-
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString();
-    };
+    const canUsePortal = typeof document !== 'undefined';
 
     if (isLoading) {
         return (
             <div className="flex justify-center p-8">
-                <Loader2 className="w-6 h-6 animate-spin text-white/20" />
+                <Loader2 className={`w-6 h-6 animate-spin ${isDark ? 'text-white/20' : 'text-zinc-400'}`} />
             </div>
         );
     }
 
     if (documents.length === 0 && !searchQuery) {
         return (
-            <div className="text-center p-8 text-white/40">
+            <div className={`text-center p-8 ${isDark ? 'text-white/40' : 'text-zinc-500'}`}>
                 <p>No documents found</p>
             </div>
         );
@@ -217,13 +304,14 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
 
     return (
         <div className="space-y-4">
-            {/* Header / Actions */}
             <div className="flex items-center justify-between px-2 mb-4">
                 <div className="flex items-center gap-3">
                     <button
                         onClick={toggleSelectAll}
                         disabled={isLoading || filteredDocuments.length === 0}
-                        className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/40 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDark
+                            ? 'text-white/40 hover:text-white'
+                            : 'text-zinc-500 hover:text-zinc-800'}`}
                     >
                         {filteredDocuments.length > 0 && selectedIds.size === filteredDocuments.length ? (
                             <CheckSquare className="w-4 h-4 text-emerald-500" />
@@ -232,26 +320,36 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                         )}
                         Select All
                     </button>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-white/40">Library ({filteredDocuments.length})</h3>
+                    <h3 className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-white/40' : 'text-zinc-500'}`}>
+                        Library ({filteredDocuments.length})
+                    </h3>
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {/* Search Bar */}
                     <div className="relative group">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/40 group-focus-within:text-white/80 transition-colors" />
+                        <Search className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 transition-colors ${isDark
+                            ? 'text-white/40 group-focus-within:text-white/80'
+                            : 'text-zinc-500 group-focus-within:text-zinc-700'}`}
+                        />
                         <input
                             type="text"
                             placeholder="Filter..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="bg-white/5 border border-white/10 rounded-md py-1 px-2 pl-8 text-sm text-white focus:outline-none focus:border-white/20 focus:bg-white/10 w-32 transition-all focus:w-48 placeholder:text-white/20 h-8"
+                            className={`rounded-md py-1 px-2 pl-8 text-sm focus:outline-none w-32 transition-all focus:w-48 h-8 ${isDark
+                                ? 'bg-white/5 border border-white/10 text-white focus:border-white/20 focus:bg-white/10 placeholder:text-white/20'
+                                : 'bg-black/[0.03] border border-black/15 text-zinc-900 focus:border-black/35 focus:bg-black/[0.05] placeholder:text-zinc-500'}`}
                         />
                     </div>
 
                     <button
-                        onClick={() => fetchDocuments()}
+                        onClick={() => {
+                            void fetchDocuments();
+                        }}
                         disabled={isLoading}
-                        className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-white/40 hover:text-white disabled:opacity-50"
+                        className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${isDark
+                            ? 'hover:bg-white/10 text-white/40 hover:text-white'
+                            : 'hover:bg-black/10 text-zinc-500 hover:text-zinc-800'}`}
                         title="Refresh list"
                     >
                         <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -261,8 +359,11 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                         <Button
                             variant="destructive"
                             size="sm"
-                            onClick={() => handleDelete(Array.from(selectedIds))}
+                            onClick={() => {
+                                void handleDelete(Array.from(selectedIds));
+                            }}
                             className="h-8 text-xs bg-red-500/10 text-red-400 hover:bg-red-500/20 border-red-500/20 ml-2"
+                            disabled={isUpdatingFolders}
                         >
                             <Trash2 className="w-3 h-3 mr-1.5" />
                             Delete ({selectedIds.size})
@@ -271,9 +372,67 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                 </div>
             </div>
 
+            <div className="flex flex-wrap items-center gap-2 px-2 mb-4">
+                <label className={`text-[11px] uppercase tracking-wider ${isDark ? 'text-white/40' : 'text-zinc-500'}`}>Folder</label>
+                <select
+                    value={folderFilter}
+                    onChange={(event) => setFolderFilter(event.target.value)}
+                    className={`folder-filter-select h-8 rounded-md px-2 text-xs focus:outline-none ${isDark
+                        ? 'bg-white/5 border border-white/10 text-white/90 focus:border-white/20'
+                        : 'bg-black/[0.03] border border-black/15 text-zinc-900 focus:border-black/35'}`}
+                >
+                    <option value="__all__">All</option>
+                    <option value="__unsorted__">Unsorted</option>
+                    {folderOptions.map((folder) => (
+                        <option key={folder} value={folder}>{folder}</option>
+                    ))}
+                </select>
+
+                {selectedIds.size > 0 && (
+                    <>
+                        <input
+                            type="text"
+                            value={bulkFolderName}
+                            onChange={(event) => setBulkFolderName(event.target.value)}
+                            placeholder="Target folder..."
+                            disabled={isUpdatingFolders}
+                            className={`h-8 min-w-[180px] rounded-md border px-2 text-xs focus:outline-none disabled:opacity-60 ${isDark
+                                ? 'bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-white/20'
+                                : 'bg-black/[0.03] border-black/15 text-zinc-900 placeholder:text-zinc-500 focus:border-black/35'}`}
+                        />
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={isUpdatingFolders || bulkFolderName.trim().length === 0}
+                            className="h-8 text-xs"
+                            onClick={() => {
+                                void handleBulkFolderUpdate(bulkFolderName.trim());
+                            }}
+                        >
+                            {isUpdatingFolders ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                                'Move'
+                            )}
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={isUpdatingFolders}
+                            className="h-8 text-xs"
+                            onClick={() => {
+                                void handleBulkFolderUpdate(null);
+                            }}
+                        >
+                            Clear
+                        </Button>
+                    </>
+                )}
+            </div>
+
             <div className="grid gap-2">
                 {filteredDocuments.length === 0 && searchQuery && (
-                    <div className="text-center p-8 text-white/40 border border-dashed border-white/10 rounded-lg">
+                    <div className={`text-center p-8 border border-dashed rounded-lg ${isDark ? 'text-white/40 border-white/10' : 'text-zinc-500 border-black/15'}`}>
                         <p>No documents match &quot;{searchQuery}&quot;</p>
                     </div>
                 )}
@@ -281,43 +440,96 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                 {filteredDocuments.map((doc) => {
                     const isSelected = selectedIds.has(doc.id);
                     const isDeleting = deletingIds.has(doc.id);
+                    const previewDisabled = doc.processingStatus === 'failed';
+                    const templateInfo = doc.templateMatched
+                        ? `Template ${doc.templateProfileId || 'unknown'} (${Math.round((doc.templateMatchScore || 0) * 100)}%), filtered ${doc.templateBoilerplateChunks || 0}`
+                        : null;
+                    const warningInfo = Array.isArray(doc.templateWarnings) && doc.templateWarnings.length > 0
+                        ? `Template warnings: ${doc.templateWarnings.join(', ')}`
+                        : null;
+                    const ocrInfo = doc.ocrRescueApplied
+                        ? `OCR rescue recovered ${doc.ocrRescueChunksRecovered || 0} chunks`
+                        : null;
+                    const ocrEngineInfo = doc.ocrRescueEngine
+                        ? `OCR engine: ${doc.ocrRescueEngine}${doc.ocrRescueFallbackEngine ? ` (fallback: ${doc.ocrRescueFallbackEngine})` : ''}`
+                        : null;
+                    const ocrWarningInfo = Array.isArray(doc.ocrRescueWarnings) && doc.ocrRescueWarnings.length > 0
+                        ? `OCR warnings: ${doc.ocrRescueWarnings.join(', ')}`
+                        : null;
+                    const folderInfo = doc.folderName?.trim() || null;
+                    const statusInfo = doc.processingStatus === 'failed' && doc.processingError
+                        ? doc.processingError
+                        : warningInfo || ocrWarningInfo;
 
                     return (
                         <div
                             key={doc.id}
                             className={`group flex items-center justify-between p-3 rounded-lg border transition-all ${isSelected
-                                ? 'bg-emerald-500/5 border-emerald-500/30'
-                                : 'bg-white/5 border-white/5 hover:border-white/10'
-                                }`}
+                                ? isDark ? 'bg-emerald-500/5 border-emerald-500/30' : 'bg-emerald-500/10 border-emerald-500/40'
+                                : isDark
+                                    ? 'bg-white/5 border-white/5 hover:border-white/10'
+                                    : 'bg-black/[0.03] border-black/10 hover:border-black/20'}`}
                         >
                             <div className="flex items-center gap-3 min-w-0">
                                 <div
-                                    onClick={(e) => { e.stopPropagation(); toggleSelect(doc.id); }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleSelect(doc.id);
+                                    }}
                                     className="cursor-pointer"
                                 >
                                     {isSelected ? (
                                         <CheckSquare className="w-5 h-5 text-emerald-500" />
                                     ) : (
-                                        <Square className="w-5 h-5 text-white/20 group-hover:text-white/40" />
+                                        <Square className={`w-5 h-5 ${isDark ? 'text-white/20 group-hover:text-white/40' : 'text-zinc-400 group-hover:text-zinc-600'}`} />
                                     )}
                                 </div>
 
-                                <div className={`p-2 rounded-md ${doc.processingStatus === 'completed' ? 'bg-emerald-500/10' :
-                                    doc.processingStatus === 'failed' ? 'bg-red-500/10' : 'bg-blue-500/10'
-                                    }`}>
-                                    <FileText className={`w-4 h-4 ${doc.processingStatus === 'completed' ? 'text-emerald-500' :
-                                        doc.processingStatus === 'failed' ? 'text-red-500' : 'text-blue-500'
-                                        }`} />
+                                <div className={`p-2 rounded-md ${doc.processingStatus === 'completed'
+                                    ? 'bg-emerald-500/10'
+                                    : doc.processingStatus === 'failed'
+                                        ? 'bg-red-500/10'
+                                        : 'bg-blue-500/10'}`}
+                                >
+                                    <FileText className={`w-4 h-4 ${doc.processingStatus === 'completed'
+                                        ? 'text-emerald-500'
+                                        : doc.processingStatus === 'failed'
+                                            ? 'text-red-500'
+                                            : 'text-blue-500'}`}
+                                    />
                                 </div>
+
                                 <div className="min-w-0">
-                                    <p className="text-sm font-medium truncate text-white/90">{toDisplayFilename(doc.filename)}</p>
-                                    <div className="flex gap-3 text-xs text-white/40">
+                                    <p className={`text-sm font-medium truncate ${isDark ? 'text-white/90' : 'text-zinc-800'}`}>
+                                        {toDisplayFilename(doc.filename)}
+                                    </p>
+                                    <div className={`flex gap-3 text-xs ${isDark ? 'text-white/40' : 'text-zinc-500'}`}>
                                         <span>{formatBytes(doc.fileSize)}</span>
-                                        <span>•</span>
+                                        <span>|</span>
                                         <span>{doc.pageCount} pages</span>
-                                        <span>•</span>
+                                        <span>|</span>
                                         <span>{formatDate(doc.createdAt)}</span>
                                     </div>
+                                    {templateInfo && (
+                                        <p className={`text-[11px] truncate ${isDark ? 'text-emerald-300/80' : 'text-emerald-700'}`}>{templateInfo}</p>
+                                    )}
+                                    {ocrInfo && (
+                                        <p className={`text-[11px] truncate ${isDark ? 'text-cyan-300/80' : 'text-cyan-700'}`}>{ocrInfo}</p>
+                                    )}
+                                    {ocrEngineInfo && (
+                                        <p className={`text-[11px] truncate ${isDark ? 'text-cyan-300/80' : 'text-cyan-700'}`}>{ocrEngineInfo}</p>
+                                    )}
+                                    {folderInfo && (
+                                        <p className={`text-[11px] truncate ${isDark ? 'text-sky-300/80' : 'text-sky-700'}`}>Folder: {folderInfo}</p>
+                                    )}
+                                    {statusInfo && (
+                                        <p className={`text-[11px] truncate ${doc.processingStatus === 'failed'
+                                            ? isDark ? 'text-red-300/90' : 'text-red-600'
+                                            : isDark ? 'text-amber-300/90' : 'text-amber-700'}`}
+                                        >
+                                            {statusInfo}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
@@ -343,17 +555,26 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
 
                                 <div className="flex items-center gap-1">
                                     <button
-                                        onClick={() => openPreview(doc)}
-                                        className="p-2 hover:bg-white/10 rounded-md transition-all text-white/40 hover:text-white"
-                                        title="Preview document"
+                                        onClick={() => {
+                                            void openPreview(doc);
+                                        }}
+                                        disabled={previewDisabled}
+                                        className={`p-2 rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent ${isDark
+                                            ? 'hover:bg-white/10 text-white/40 hover:text-white disabled:hover:text-white/40'
+                                            : 'hover:bg-black/10 text-zinc-500 hover:text-zinc-800 disabled:hover:text-zinc-500'}`}
+                                        title={previewDisabled ? 'Preview unavailable: no extracted text' : 'Preview document'}
                                     >
                                         <Eye className="w-4 h-4" />
                                     </button>
 
                                     <button
-                                        onClick={() => handleDelete([doc.id])}
+                                        onClick={() => {
+                                            void handleDelete([doc.id]);
+                                        }}
                                         disabled={isDeleting}
-                                        className="p-2 hover:bg-white/10 rounded-md transition-all text-white/40 hover:text-red-400 disabled:opacity-50"
+                                        className={`p-2 rounded-md transition-all hover:text-red-400 disabled:opacity-50 ${isDark
+                                            ? 'hover:bg-white/10 text-white/40'
+                                            : 'hover:bg-black/10 text-zinc-500'}`}
                                         title="Delete document"
                                     >
                                         {isDeleting ? (
@@ -369,11 +590,17 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                 })}
             </div>
 
-            {/* Preview Modal Overlay */}
-            {previewDoc && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                    <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-white/10 rounded-xl flex flex-col shadow-2xl">
-                        {/* Modal Header */}
+            {previewDoc && canUsePortal && createPortal(
+                <div
+                    className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm pointer-events-auto"
+                    onClick={closePreview}
+                >
+                    <div
+                        className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-white/10 rounded-xl flex flex-col shadow-2xl pointer-events-auto"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                        }}
+                    >
                         <div className="flex items-center justify-between p-4 border-b border-white/10">
                             <h3 className="font-semibold text-lg flex items-center gap-2">
                                 <FileText className="w-5 h-5 text-emerald-500" />
@@ -387,7 +614,6 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                             </button>
                         </div>
 
-                        {/* Modal Content */}
                         <div className="flex-1 overflow-y-auto p-6 bg-white/5 font-mono text-sm leading-relaxed custom-scrollbar">
                             {loadingPreview ? (
                                 <div className="flex items-center justify-center h-full text-white/40 gap-3">
@@ -401,17 +627,16 @@ export default function FileList({ refreshTrigger = 0 }: FileListProps) {
                             )}
                         </div>
 
-                        {/* Modal Footer */}
                         <div className="p-4 border-t border-white/10 flex justify-end">
                             <Button variant="secondary" onClick={closePreview}>
                                 Close Preview
                             </Button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body,
             )}
         </div>
     );
 }
-
 

@@ -206,6 +206,23 @@
   }
 }
 
+@keyframes suggestionCardPopIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+
+  70% {
+    opacity: 1;
+    transform: translate3d(0, 1px, 0);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
@@ -222,6 +239,32 @@
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: color-mix(in srgb, var(--c-content) 40%, transparent);
+  }
+
+  .custom-scrollbar-wide {
+    scrollbar-width: auto;
+    scrollbar-color: color-mix(in srgb, var(--c-content) 45%, transparent) color-mix(in srgb, var(--c-content) 10%, transparent);
+  }
+
+  .custom-scrollbar-wide::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  .custom-scrollbar-wide::-webkit-scrollbar-track {
+    background: color-mix(in srgb, var(--c-content) 10%, transparent);
+    border-radius: 10px;
+  }
+
+  .custom-scrollbar-wide::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--c-content) 40%, transparent);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .custom-scrollbar-wide::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--c-content) 60%, transparent);
+    background-clip: padding-box;
   }
 
   .scrollbar-hide::-webkit-scrollbar {
@@ -279,4 +322,111 @@
   .bg-action {
     background-color: var(--c-action);
   }
+
+  .suggestion-card-pop {
+    animation-name: suggestionCardPopIn;
+    animation-duration: 460ms;
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+    animation-fill-mode: both;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+    contain: paint;
+    will-change: transform, opacity;
+  }
+
+  .suggestion-card-hover {
+    transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      color 220ms ease;
+  }
+
+  .suggestion-card-hover:hover {
+    transform: translateY(-2px);
+  }
+
+  .suggestion-card-hover:active {
+    transform: translateY(0) scale(0.995);
+  }
+
+  .suggestion-icon-bubble {
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+    background-color: color-mix(in srgb, var(--c-glass) 12%, transparent);
+    transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      background-color 240ms ease;
+  }
+
+  .suggestion-icon-bubble svg {
+    transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .suggestion-card-hover:hover .suggestion-icon-bubble {
+    transform: translateY(-1px) scale(1.04);
+    background-color: color-mix(in srgb, var(--c-glass) 22%, transparent);
+  }
+
+  .suggestion-card-hover:hover .suggestion-icon-bubble svg {
+    transform: scale(1.08) rotate(6deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .suggestion-card-pop {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .suggestion-card-hover,
+  .suggestion-icon-bubble,
+  .suggestion-icon-bubble svg {
+    transition: none;
+  }
+
+  .suggestion-card-hover:hover,
+  .suggestion-card-hover:active,
+  .suggestion-card-hover:hover .suggestion-icon-bubble,
+  .suggestion-card-hover:hover .suggestion-icon-bubble svg {
+    transform: none;
+  }
+}
+
+.folder-filter-select {
+  color-scheme: light;
+  background-color: #ffffff;
+  color: #1f2937;
+}
+
+.folder-filter-select option {
+  background-color: #ffffff;
+  color: #111827;
+}
+
+.folder-filter-select option:checked {
+  background-color: #dcfce7;
+  color: #14532d;
+}
+
+:root[data-theme="dark"] .folder-filter-select,
+body[data-theme="dark"] .folder-filter-select {
+  color-scheme: dark;
+  background-color: color-mix(in srgb, var(--c-content) 8%, transparent);
+  color: color-mix(in srgb, var(--c-light) 90%, transparent);
+}
+
+:root[data-theme="dark"] .folder-filter-select option,
+body[data-theme="dark"] .folder-filter-select option {
+  background-color: #1f2126;
+  color: #eef2f7;
+}
+
+:root[data-theme="dark"] .folder-filter-select option:checked,
+body[data-theme="dark"] .folder-filter-select option:checked {
+  background-color: #2f6ea6;
+  color: #ffffff;
 }

@@ -1,66 +1,89 @@
-import { MessageSquare, Sparkles, Code2, Layers } from 'lucide-react';
+'use client';
 
-export default function EmptyState() {
-    const features = [
-        {
-            icon: Sparkles,
-            label: "Liquid Glass",
-            sub: "Apple Material Design"
-        },
-        {
-            icon: Code2,
-            label: "System UI",
-            sub: "Native Font Stack"
-        },
-        {
-            icon: Layers,
-            label: "Backdrop Blur",
-            sub: "Vibrancy & Depth"
-        },
-        {
-            icon: MessageSquare,
-            label: "Responsive",
-            sub: "Adaptive Layouts"
-        }
-    ];
+import { useMemo } from 'react';
+import {
+    CHAT_SUGGESTION_POOL,
+    EMPTY_STATE_SUGGESTION_COUNT,
+    pickRandomSuggestions,
+    type SuggestionPoolItem,
+} from './suggestionPool';
+import { getCustomSuggestionIcon } from './icons/custom/registry';
+
+interface EmptyStateProps {
+    onSuggestionSelect?: (prompt: string) => void;
+    onSuggestionClick?: (suggestion: SuggestionPoolItem) => void;
+}
+
+export default function EmptyState({ onSuggestionSelect, onSuggestionClick }: EmptyStateProps) {
+    const suggestions = useMemo<SuggestionPoolItem[]>(
+        () => pickRandomSuggestions(CHAT_SUGGESTION_POOL, EMPTY_STATE_SUGGESTION_COUNT),
+        [],
+    );
 
     return (
-        <div className="flex flex-col items-center justify-center h-full p-8 animate-in fade-in zoom-in duration-700">
-            <div className="relative mb-12 group">
-                {/* Glow behind logo */}
-                <div className="absolute inset-0 bg-blue-500/10 blur-[80px] rounded-full group-hover:bg-blue-500/20 transition-colors duration-1000" />
-
-                <div className="relative w-24 h-24 rounded-[32px] flex items-center justify-center mb-8 mx-auto shadow-2xl ring-1 ring-white/10 bg-white/5 backdrop-blur-3xl">
-                    <MessageSquare className="w-10 h-10 text-white/80" strokeWidth={1} />
+        <div className="flex h-full flex-col items-center justify-center p-8">
+            <div className="mb-10 flex flex-col items-center">
+                <div className="mb-8 flex h-20 w-20 items-center justify-center rounded-3xl liquid-glass">
+                    <svg
+                        className="h-10 w-10"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        style={{ color: 'var(--c-action)' }}
+                    >
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                        />
+                    </svg>
                 </div>
 
-                <h2 className="text-4xl font-medium text-center tracking-tight text-white mb-3" style={{ fontFamily: 'var(--font-ui)' }}>
+                <h1 className="mb-2 text-4xl font-semibold text-[var(--c-content)]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                     WenkuGPT
-                </h2>
-                <p className="text-white/40 text-center text-lg font-light tracking-wide">
-                    Designed for 2026.
+                </h1>
+                <p className="text-center text-2xl text-[var(--c-content)]/50" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    Start a conversation with AI
                 </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 max-w-lg w-full">
-                {features.map((feature, i) => (
-                    <div
-                        key={i}
-                        className="p-5 rounded-[24px] text-center hover:bg-white/5 active:scale-[0.98] cursor-pointer transition-all duration-300 group border border-transparent hover:border-white/10 h-auto bg-white/[0.02]"
-                    >
-                        <div className="flex flex-col items-center gap-3">
-                            <feature.icon className="w-6 h-6 text-white/70 group-hover:text-white transition-colors duration-300" strokeWidth={1.5} />
-                            <div>
-                                <h3 className="font-medium text-[15px] text-white/90 tracking-wide mb-0.5" style={{ fontFamily: 'var(--font-ui)' }}>
-                                    {feature.label}
-                                </h3>
-                                <p className="text-[13px] text-white/40 font-light">
-                                    {feature.sub}
-                                </p>
+            <div className="grid w-full max-w-4xl grid-cols-1 gap-4 md:grid-cols-2">
+                {suggestions.map((suggestion, index) => {
+                    const SuggestionIcon = getCustomSuggestionIcon(suggestion.icon);
+
+                    return (
+                        <button
+                            key={suggestion.title}
+                            type="button"
+                            onClick={() => {
+                                onSuggestionClick?.(suggestion);
+                                onSuggestionSelect?.(suggestion.prompt);
+                            }}
+                            className="liquid-glass suggestion-card-pop suggestion-card-hover group relative w-full rounded-[24px] p-5 text-left transition-colors duration-200 hover:text-[var(--c-action)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-action)]/60"
+                            style={{ animationDelay: `${index * 110}ms` }}
+                        >
+                            <span
+                                aria-hidden
+                                className="pointer-events-none absolute inset-0 rounded-[24px] opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100"
+                                style={{ backgroundColor: 'color-mix(in srgb, var(--c-glass) 18%, transparent)' }}
+                            />
+                            <div className="relative z-10 flex items-start gap-4">
+                                <div className="suggestion-icon-bubble">
+                                    <SuggestionIcon className="h-5 w-5 text-[var(--c-action)]" strokeWidth={1.8} />
+                                </div>
+                                <div>
+                                    <h3 className="mb-0.5 text-[15px] font-medium tracking-wide text-[var(--c-content)]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                        {suggestion.title}
+                                    </h3>
+                                    <p className="text-[13px] text-[var(--c-content)]/55" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                        {suggestion.subtitle}
+                                    </p>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                ))}
+                        </button>
+                    );
+                })}
             </div>
         </div>
     );

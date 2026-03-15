@@ -13,6 +13,8 @@ interface RequestLike {
   };
 }
 
+const isBrowser = typeof window !== 'undefined';
+
 function formatMessage(level: LogLevel, message: string, context?: LogContext, error?: unknown) {
   const base: Record<string, unknown> = {
     level,
@@ -32,6 +34,20 @@ function formatMessage(level: LogLevel, message: string, context?: LogContext, e
   }
 
   return JSON.stringify(base);
+}
+
+function buildContext(context?: LogContext, error?: unknown): Record<string, unknown> | undefined {
+  const hasContext = context && Object.keys(context).length > 0;
+  const hasError = error !== undefined;
+  if (!hasContext && !hasError) return undefined;
+
+  const ctx: Record<string, unknown> = { ...context };
+  if (error instanceof Error) {
+    ctx.error = { name: error.name, message: error.message, stack: error.stack };
+  } else if (hasError) {
+    ctx.error = error;
+  }
+  return ctx;
 }
 
 export function createRequestId(): string {
@@ -55,18 +71,38 @@ export function devLog(...args: unknown[]) {
 }
 
 export function logDebug(message: string, context?: LogContext) {
-  console.debug(formatMessage('debug', message, context));
+  if (isBrowser) {
+    const ctx = buildContext(context);
+    ctx ? console.debug(message, ctx) : console.debug(message);
+  } else {
+    console.debug(formatMessage('debug', message, context));
+  }
 }
 
 export function logInfo(message: string, context?: LogContext) {
-  console.info(formatMessage('info', message, context));
+  if (isBrowser) {
+    const ctx = buildContext(context);
+    ctx ? console.info(message, ctx) : console.info(message);
+  } else {
+    console.info(formatMessage('info', message, context));
+  }
 }
 
 export function logWarn(message: string, context?: LogContext, error?: unknown) {
-  console.warn(formatMessage('warn', message, context, error));
+  if (isBrowser) {
+    const ctx = buildContext(context, error);
+    ctx ? console.warn(message, ctx) : console.warn(message);
+  } else {
+    console.warn(formatMessage('warn', message, context, error));
+  }
 }
 
 export function logError(message: string, context?: LogContext, error?: unknown) {
-  console.error(formatMessage('error', message, context, error));
+  if (isBrowser) {
+    const ctx = buildContext(context, error);
+    ctx ? console.error(message, ctx) : console.error(message);
+  } else {
+    console.error(formatMessage('error', message, context, error));
+  }
 }
 

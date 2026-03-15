@@ -30,3 +30,133 @@ Fix missing `x-user-email` propagation in browser API requests.
 - Upload/chat/document flows pass in production.
 - No missing identity errors in fresh attempts.
 - Tracker items 1-8 marked `done`.
+
+## RAG v2 follow-up track (2026-02-10)
+1. `done` Add `v1/v2` runtime switch and cache namespace isolation.
+2. `done` Add RAG v2 docs/log skeleton under `docs/rag-v2/`.
+3. `done` Add Postgres graph-memory schema + migration scaffolding.
+4. `done` Add v2 query-flow scaffolding (term detect, rewrite, graph expansion, strict fail path).
+5. `done` Add API contract extensions (`contextScope`, `effectiveAt`, `ambiguityPolicy`, response metadata).
+6. `done` Add v2 feature flags + backend kill-switch.
+7. `done` Add term-candidate ingestion scaffolding and review workflow helpers.
+8. `in_progress` Expand integration coverage and runtime validation checklist.
+
+## PDF highlight precision remediation track (2026-02-10)
+1. `done` Confirm strategy (`end-to-end`) and rollout decision (`full reupload/reingest`).
+2. `done` Implement page-local chunk block matching in `src/lib/ingest/chunker.ts`.
+3. `done` Harden highlight metadata generation in `src/lib/ingest/pipeline.ts`.
+4. `done` Harden viewer coarse detection + context fallback + mode badge in `src/components/chat/PDFViewer.tsx`.
+5. `done` Improve citation context propagation in `src/components/chat/ChatMessage.tsx`.
+6. `done` Expand bbox diagnostic tooling in `scripts/check_bboxes.ts`.
+7. `done` Run static gates and regression tests.
+8. `in_progress` Reupload/reingest docs and complete runtime citation validation.
+9. `done` Clear DB + reingest from Supabase storage (`72/72` processed, dedupe to `22` DB docs).
+10. `done` Add viewer retry/suppress logic for coarse highlight race in `src/components/chat/PDFViewer.tsx`.
+11. `in_progress` Final browser citation-click validation on known problematic query/PDF.
+
+## PDF context-anchor deep-fix track (2026-02-10)
+1. `done` Complete root-cause review (UI evidence + code path + DB metadata).
+2. `done` Add dual-read data shape support for `highlightText` (schema/query/agents/API/client types).
+3. `done` Add ingest snippet generation for `chunks.highlight_text`.
+4. `done` Add DB migration scaffold for `highlight_text`.
+5. `done` Replace viewer cache key with page + context + highlight signature.
+6. `done` Implement region-first resolver with spatial validation gate in `PDFViewer`.
+7. `done` Add deterministic `bbox-fallback` mode and debug reason codes.
+8. `done` Add unit tests for context helper + geometry/signature utilities.
+9. `in_progress` Browser regression matrix on known problematic citation flow.
+10. `done` Run static gates (`tsc`, `lint`, `test:run`, `build`).
+11. `planned` Dual-read rollout verification in production and incident closure note.
+
+## DB schema alignment for ingest track (2026-02-10)
+1. `done` Confirm real production error (`PG 42703`, `column "highlight_text" does not exist`).
+2. `done` Confirm runtime insert path writes `chunks.highlight_text`.
+3. `done` Apply production SQL hotfix (`ALTER TABLE public.chunks ADD COLUMN IF NOT EXISTS highlight_text text`).
+4. `done` Verify column existence + read query success after hotfix.
+5. `done` Run production ingest smoke (`POST /api/ingest`) and confirm `success: true`.
+6. `done` Add schema preflight module (`src/lib/db/schema-health.ts`) with 60s cache.
+7. `done` Wire preflight check into ingest route before pipeline processing.
+8. `done` Add explicit PG `42703` error mapping + `INGEST_SCHEMA_MISMATCH` response path.
+9. `done` Add strict guardrail script (`scripts/check_ingest_schema.ts`) + npm script.
+10. `done` Production deploy + post-deploy ingest validation for hardening patch.
+
+## Template-aware ingest track (2026-02-10)
+1. `done` Add template profile module with registry loading and diagnostics (`src/lib/ingest/template.ts`).
+2. `done` Add default template profile seed (`config/template-profiles/wenku-manual-v1.json`).
+3. `done` Add template profile builder script (`scripts/build_template_profile.ts`) + npm script (`template:build-profile`).
+4. `done` Integrate template detection into ingest pipeline with 10% sampling (`min 3`, `max 12`) and optional OCR fallback.
+5. `done` Add boilerplate chunk marking (`chunks.is_template_boilerplate`) and exclusion from embedding/FTS writes.
+6. `done` Add retrieval-time exclusion guarded by feature flag (`TEMPLATE_AWARE_FILTERING_ENABLED`) in `src/lib/db/queries.ts`.
+7. `done` Extend `POST /api/ingest` response with template diagnostics and options support for `templateProfileId`.
+8. `done` Extend `GET /api/documents` payload with template diagnostics fields.
+9. `done` Update file-management UI to surface template warnings and match metadata.
+10. `done` Add migration `drizzle/0005_template_aware_ingest.sql` and update schema preflight requirements.
+11. `done` Update docs/env (`README.md`, `docs/api.md`, `.env.example`).
+12. `done` Add tests for template module and schema-health updates; run full gates (`tsc`, `lint`, `lint:scripts`, `test:run`).
+13. `in_progress` Rollout execution: apply migration on target DB, generate tuned production profile(s), enable flags progressively (preview -> partial -> full).
+
+## OCR engine switch track (2026-02-11)
+1. `done` Add user-level OCR engine setting (`gemini`/`tesseract`) and persist migration (`v7`).
+2. `done` Add ingest UI selector + upload options wiring (`emptyChunkOcrEngine`).
+3. `done` Add OCR provider orchestrator with locked no-fallback policy.
+4. `done` Add Tesseract provider implementation (`tesseract.js`, `ces`, page cap 6, unavailable path).
+5. `done` Update ingestion pipeline diagnostics (`engine`, `fallbackEngine`, `engineUsed`) + telemetry payload.
+6. `done` Extend documents schema, DB migration (`0007`), and schema-health checks.
+7. `done` Extend ingest/documents API payload contracts and endpoint docs string.
+8. `done` Add unit/API/schema tests for provider routing, tesseract path, options sanitize, and metadata mapping.
+9. `done` Run full validation gates (`tsc`, `lint`, `test:run`, `build`) and record closure evidence.
+
+
+## OCR switch production rollout follow-up (2026-02-11)
+1. `done` Apply production DB migrations `0005_template_aware_ingest.sql`, `0006_empty_chunk_ocr_rescue.sql`, `0007_ocr_engine_switch.sql`.
+2. `done` Verify strict preflight schema health via `npm run db:check-ingest-schema` (`ingest_schema_ok=true`, no missing columns).
+3. `done` Run production smoke matrix for OCR rescue OFF / ON+gemini / ON+tesseract (warning-only unavailable path confirmed).
+4. `done` Verify `GET /api/documents` reads OCR engine metadata fields without DB/runtime errors.
+5. `done` Deploy current branch and confirm alias points to deployment `dpl_FjkzRouUgBSRjfyFCBYUr3m1H9EF`.
+6. `in_progress` Final browser UX regression pass and telemetry follow-up (`ingest_ocr_warning_codes`, latency by engine).
+
+## Zero-chunk scan hardening track (2026-02-11)
+1. `done` Add OCR re-chunk fallback for short OCR text (`minTokens=1`) when default chunking yields 0 chunks.
+2. `done` Add warning code `ocr_rescue_short_text_fallback_chunk` in OCR rescue diagnostics.
+3. `done` Mark document as `failed` with explicit `processingError` when final chunk count is 0.
+4. `done` Add ingest telemetry/log keys `chunk_count_after_ocr` and `document_final_status`.
+5. `done` Update preview route to return `DOCUMENT_PREVIEW_EMPTY` for failed docs without chunks and `DOCUMENT_NOT_FOUND` for missing docs.
+6. `done` Update upload UI to treat ingest `chunkCount === 0` as user-visible error (not success).
+7. `done` Disable preview action in file list for failed docs (tooltip explains no extracted text).
+8. `done` Add tests: OCR rescue fallback + preview route behavior (`failed+empty`, `exists+chunks`, `missing`).
+9. `done` Run full gates (`tsc`, `lint`, `test:run`, `build`).
+10. `done` Commit, push, and deploy current hardening patch (`6f035cb`, `https://wenkugpt-copy-agizq24wt-nerotinys-projects.vercel.app`, alias updated).
+
+## Chat empty-state UX and icon system track (2026-02-11)
+1. `done` Add conversational suggestion cards in empty state and wire click-to-send flow.
+2. `done` Restore liquid-glass hero composition while keeping suggestion functionality.
+3. `done` Add random suggestion pool behavior (`4` cards per render) via `suggestionPool.ts`.
+4. `done` Add staged card motion (staggered entrance) and refine to ultra-subtle timing profile.
+5. `done` Add premium hover effects for icon bubble + card surface.
+6. `done` Introduce custom inline SVG icon registry and typed icon IDs (V1).
+7. `done` Refresh icon set to V2 taxonomy (sport/apparel/lifestyle/context/brand/generic).
+8. `done` Remove deprecated icons from V2 refresh (`helmet`, `paddle`).
+9. `done` Remove rope icon from active set and remap usage in suggestion pool.
+10. `done` Validate and deploy latest state:
+   - commit `4154e58`
+   - deployment `dpl_AdckU3FAhEZmzuJFEbEDoSMQifjU`
+   - alias `https://wenkugpt-copy.vercel.app` ready.
+11. `done` Add liquid-glass chat-bubble favicon and deploy:
+   - commit `a2dfadf`
+   - deployment `dpl_9xtSkacA1E3YSw4pju88N54GwDiH`
+   - alias `https://wenkugpt-copy.vercel.app` ready.
+12. `in_progress` Final visual tuning pass by user feedback (icon detail polish + card copy curation).
+13. `in_progress` Empty-state hero title normalization (`Liquid Glass Chat` -> `WenkuGPT`) is implemented locally and awaiting commit/push/deploy.
+
+## Bejroska easter-egg model visibility hotfix (2026-02-11)
+1. `done` Confirm production symptom: overlay appears but 3D hoodie often not rendered.
+2. `done` Identify likely technical cause: remote `unpkg` model-viewer script blocked by production CSP (`script-src 'self'`).
+3. `done` Identify UX cause: `durationMs=3000` likely too short for cold-load GLB render window.
+4. `done` Add GLB asset to repo and deploy:
+   - file `public/models/bejroska-hoodie.glb`
+   - commit `95106d5`
+   - alias now points to deployment `dpl_BoBmwbCDZmDHqaWRW6vmVvXG4TMW`.
+5. `done` Replace remote script injection with local package import (`@google/model-viewer`) in client component.
+6. `done` Keep CSP strict (no unpkg whitelist).
+7. `done` Apply user-requested manual close policy (disable auto-close; keep overlay open until user click).
+8. `planned` Preserve fallback path when GLB load fails.
+9. `in_progress` Run gates (`lint`, `tsc`, `build`) and deploy alias update (gates green; deploy pending).

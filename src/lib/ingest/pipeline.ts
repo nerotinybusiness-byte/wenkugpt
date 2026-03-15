@@ -6,13 +6,24 @@ dotenv.config({ path: path.join(process.cwd(), '.env.local') });
 import { parseDocument, ParsedDocument } from './parser';
 import { chunkDocument, SemanticChunk, DEFAULT_CHUNKER_CONFIG } from './chunker';
 import { embedTexts, isEmbedderConfigured, DEFAULT_EMBEDDER_CONFIG } from './embedder';
+import { detectTemplateForDocument, type TemplateDiagnostics } from './template';
+import { runOcrRescueProvider, resolveOcrEngine } from './ocr-provider';
+import type { OcrEngine } from './ocr';
+import {
+    mergeOcrTextIntoPages,
+    rechunkPagesAfterOcr,
+    resolveOcrCandidatePages,
+    shouldTriggerOcrRescue,
+} from './ocr-rescue';
 import { logResidencyStatus } from '@/lib/config/regions';
 import CryptoJS from 'crypto-js';
 import fs from 'fs/promises';
 import { db } from '@/lib/db';
-import { documents, chunks as chunksTable } from '@/lib/db/schema';
-import { eq, and, sql } from 'drizzle-orm';
-import { devLog, logError } from '@/lib/logger';
+import { documents, chunks as chunksTable, type BoundingBox } from '@/lib/db/schema';
+import { and, eq, sql } from 'drizzle-orm';
+import { devLog, logError, logInfo } from '@/lib/logger';
+import { getRagV2Flags } from '@/lib/rag-v2/flags';
+import { ingestSlangCandidates } from '@/lib/rag-v2/ingest';
 
 /**
  * Pipeline processing result
@@ -24,6 +35,10 @@ export interface PipelineResult {
     document: ParsedDocument;
     /** Semantic chunks with embeddings */
     chunks: SemanticChunk[];
+    /** Template diagnostics used for filtering and warnings */
+    template: TemplateDiagnostics;
+    /** OCR rescue diagnostics for empty/low chunk PDF ingests */
+    ocrRescue: OcrRescueDiagnostics;
     /** Processing statistics */
     stats: {
         parseTimeMs: number;
@@ -36,8 +51,26 @@ export interface PipelineResult {
         totalTextBlocks: number;
         totalTokens: number;
         embeddingApiCalls: number;
+        slangCandidates: number;
+        indexableChunkCount: number;
+        boilerplateChunkCount: number;
     };
 }
+
+export interface OcrRescueDiagnostics {
+    enabled: boolean;
+    attempted: boolean;
+    applied: boolean;
+    engine: OcrEngine | null;
+    fallbackEngine: OcrEngine | null;
+    engineUsed: OcrEngine | null;
+    chunksBefore: number;
+    chunksAfter: number;
+    pagesAttempted: number;
+    warnings: string[];
+}
+
+const EMPTY_INDEXABLE_TEXT_ERROR = 'No indexable text extracted from document (OCR produced no usable text).';
 
 /**
  * Generate SHA-256 hash of content
@@ -49,9 +82,127 @@ function sha256(content: string | Buffer | Uint8Array): string {
     return CryptoJS.SHA256(data).toString(CryptoJS.enc.Hex);
 }
 
+function normalizeDisplayFilename(filename: string): string {
+    const basename = filename.split(/[/\\]/).pop() || filename;
+    // Stored files are typically "<userId>_<uuid>_<safeOriginalName>".
+    return basename.replace(/^[^_]+_[0-9a-fA-F-]{36}_/, '');
+}
+
+function clamp01(value: number): number {
+    return Math.max(0, Math.min(1, value));
+}
+
+function sanitizeBoundingBox(bbox: BoundingBox | null | undefined): BoundingBox | null {
+    if (!bbox) return null;
+    const values = [bbox.x, bbox.y, bbox.width, bbox.height];
+    if (values.some((value) => !Number.isFinite(value))) return null;
+
+    const x = clamp01(bbox.x);
+    const y = clamp01(bbox.y);
+    const width = clamp01(Math.min(bbox.width, 1 - x));
+    const height = clamp01(Math.min(bbox.height, 1 - y));
+    if (width <= 0 || height <= 0) return null;
+
+    return { x, y, width, height };
+}
+
+function mergeNearbyHighlightBoxes(boxes: BoundingBox[]): BoundingBox[] {
+    if (boxes.length <= 1) return boxes;
+
+    const sorted = [...boxes].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    const merged: BoundingBox[] = [];
+
+    for (const box of sorted) {
+        const last = merged[merged.length - 1];
+        if (!last) {
+            merged.push({ ...box });
+            continue;
+        }
+
+        const sameRow = Math.abs(last.y - box.y) < 0.02 && Math.abs(last.height - box.height) < 0.03;
+        const touching = box.x <= last.x + last.width + 0.03;
+        if (sameRow && touching) {
+            const minX = Math.min(last.x, box.x);
+            const maxX = Math.max(last.x + last.width, box.x + box.width);
+            const minY = Math.min(last.y, box.y);
+            const maxY = Math.max(last.y + last.height, box.y + box.height);
+            last.x = minX;
+            last.y = minY;
+            last.width = maxX - minX;
+            last.height = maxY - minY;
+            continue;
+        }
+
+        merged.push({ ...box });
+    }
+
+    return merged;
+}
+
+function buildHighlightBoxes(chunk: SemanticChunk): BoundingBox[] | null {
+    const chunkBox = sanitizeBoundingBox(chunk.bbox);
+    const sourceBlocks = (chunk as SemanticChunk & { sourceBlocks?: Array<{ bbox: BoundingBox }> }).sourceBlocks;
+    if (!Array.isArray(sourceBlocks) || sourceBlocks.length === 0) {
+        return chunkBox ? [chunkBox] : null;
+    }
+
+    const dedup = new Map<string, BoundingBox>();
+    for (const block of sourceBlocks) {
+        const bbox = sanitizeBoundingBox(block?.bbox);
+        if (!bbox) continue;
+        const key = [
+            bbox.x.toFixed(4),
+            bbox.y.toFixed(4),
+            bbox.width.toFixed(4),
+            bbox.height.toFixed(4),
+        ].join(':');
+        if (!dedup.has(key)) dedup.set(key, bbox);
+    }
+
+    const boxes = mergeNearbyHighlightBoxes([...dedup.values()]
+        .sort((a, b) => (a.y - b.y) || (a.x - b.x))
+        .slice(0, 48))
+        .slice(0, 24);
+
+    if (boxes.length === 0) {
+        return chunkBox ? [chunkBox] : null;
+    }
+
+    return boxes;
+}
+
+function buildHighlightText(chunk: SemanticChunk): string | null {
+    const sourceBlocks = (chunk as SemanticChunk & {
+        sourceBlocks?: Array<{ bbox?: BoundingBox; text?: string }>;
+    }).sourceBlocks;
+    if (!Array.isArray(sourceBlocks) || sourceBlocks.length === 0) {
+        return null;
+    }
+
+    const snippet = sourceBlocks
+        .filter((block) => typeof block?.text === 'string')
+        .sort((a, b) => {
+            const ay = a.bbox?.y ?? 0;
+            const by = b.bbox?.y ?? 0;
+            if (ay !== by) return ay - by;
+            const ax = a.bbox?.x ?? 0;
+            const bx = b.bbox?.x ?? 0;
+            return ax - bx;
+        })
+        .map((block) => (block.text || '').replace(/\s+/g, ' ').trim())
+        .filter((text) => text.length > 0)
+        .slice(0, 6)
+        .join(' ')
+        .trim()
+        .slice(0, 480);
+
+    return snippet || null;
+}
+
+
 /**
  * Process a document through the full ingestion pipeline
- * 
+ *
  * @param buffer - File content as Buffer or Uint8Array
  * @param mimeType - MIME type of the file
  * @param filename - Original filename
@@ -67,7 +218,12 @@ export async function processPipeline(
         accessLevel?: 'public' | 'private' | 'team';
         skipEmbedding?: boolean;
         skipStorage?: boolean;
-    } = {}
+        originalFilename?: string;
+        templateProfileId?: string;
+        emptyChunkOcrEnabled?: boolean;
+        emptyChunkOcrEngine?: OcrEngine;
+        folderName?: string;
+    } = {},
 ): Promise<PipelineResult> {
     const startTime = performance.now();
     const userId = options.userId;
@@ -78,7 +234,7 @@ export async function processPipeline(
     }
 
     devLog(`\n${'='.repeat(60)}`);
-    devLog(`📄 WENKUGPT Ingestion Pipeline`);
+    devLog('WENKUGPT Ingestion Pipeline');
     devLog(`${'='.repeat(60)}`);
     devLog(`File: ${filename}`);
     devLog(`Type: ${mimeType}`);
@@ -90,56 +246,182 @@ export async function processPipeline(
     // =========================================================================
     // STEP 1: Parse Document
     // =========================================================================
-    devLog('📖 Step 1: Parsing document...');
+    devLog('Step 1: Parsing document...');
     const parseStart = performance.now();
 
     const document = await parseDocument(buffer, mimeType);
 
     const parseTimeMs = performance.now() - parseStart;
-    devLog(`   ✓ Parsed ${document.pageCount} pages in ${parseTimeMs.toFixed(0)}ms`);
+    devLog(`   Parsed ${document.pageCount} pages in ${parseTimeMs.toFixed(0)}ms`);
 
     const totalTextBlocks = document.pages.reduce(
         (sum, page) => sum + page.textBlocks.length,
-        0
+        0,
     );
-    devLog(`   ✓ Found ${totalTextBlocks} text blocks`);
+    devLog(`   Found ${totalTextBlocks} text blocks`);
 
     // =========================================================================
     // STEP 2: Semantic Chunking
     // =========================================================================
-    devLog('\n✂️  Step 2: Semantic chunking...');
+    devLog('\nStep 2: Semantic chunking...');
     const chunkStart = performance.now();
 
-    const chunks = chunkDocument(document.pages, DEFAULT_CHUNKER_CONFIG);
+    let workingPages = document.pages;
+    let chunks = chunkDocument(workingPages, DEFAULT_CHUNKER_CONFIG);
+    const selectedOcrEngine = resolveOcrEngine(options.emptyChunkOcrEngine);
+    const ocrRescue: OcrRescueDiagnostics = {
+        enabled: options.emptyChunkOcrEnabled === true,
+        attempted: false,
+        applied: false,
+        engine: options.emptyChunkOcrEnabled === true ? selectedOcrEngine : null,
+        fallbackEngine: null,
+        engineUsed: null,
+        chunksBefore: chunks.length,
+        chunksAfter: chunks.length,
+        pagesAttempted: 0,
+        warnings: [],
+    };
 
+    devLog(`   Initial chunks: ${chunks.length}`);
+
+    const shouldEvaluateOcrRescue = shouldTriggerOcrRescue(mimeType, chunks.length);
+
+    if (shouldEvaluateOcrRescue) {
+        if (!ocrRescue.enabled) {
+            ocrRescue.warnings.push('ocr_rescue_disabled');
+        } else {
+            const candidatePages = resolveOcrCandidatePages(workingPages);
+            if (candidatePages.length === 0) {
+                ocrRescue.warnings.push('ocr_rescue_no_text_extracted');
+            } else {
+                ocrRescue.attempted = true;
+                const providerResult = await runOcrRescueProvider({
+                    pdfBuffer: buffer,
+                    pages: candidatePages,
+                    engine: selectedOcrEngine,
+                });
+                ocrRescue.pagesAttempted = providerResult.pagesProcessed;
+                ocrRescue.engineUsed = providerResult.engineUsed;
+                ocrRescue.fallbackEngine = providerResult.fallbackEngine;
+                if (providerResult.warnings.length > 0) {
+                    ocrRescue.warnings.push(...providerResult.warnings);
+                }
+
+                const extractedCount = [...providerResult.ocrByPage.values()]
+                    .map((text) => text.trim())
+                    .filter((text) => text.length > 0)
+                    .length;
+
+                if (extractedCount === 0) {
+                    if (!ocrRescue.warnings.includes('ocr_rescue_no_text_extracted')) {
+                        ocrRescue.warnings.push('ocr_rescue_no_text_extracted');
+                    }
+                } else {
+                    workingPages = mergeOcrTextIntoPages(workingPages, providerResult.ocrByPage);
+                    const rescueChunkingResult = rechunkPagesAfterOcr(workingPages);
+                    const rescuedChunks = rescueChunkingResult.chunks;
+                    ocrRescue.chunksAfter = rescuedChunks.length;
+                    ocrRescue.applied = rescuedChunks.length > ocrRescue.chunksBefore;
+                    if (rescueChunkingResult.usedShortTextFallback) {
+                        ocrRescue.warnings.push('ocr_rescue_short_text_fallback_chunk');
+                    }
+                    if (ocrRescue.applied) {
+                        chunks = rescuedChunks;
+                    } else {
+                        ocrRescue.warnings.push('ocr_rescue_no_chunk_gain');
+                    }
+                }
+
+                logInfo('OCR rescue telemetry', {
+                    route: 'ingest',
+                    stage: 'ocr-rescue',
+                    ingest_ocr_engine_usage: providerResult.engineUsed ?? providerResult.engine,
+                    ingest_ocr_engine_fallback_rate: providerResult.fallbackEngine ? 1 : 0,
+                    ingest_ocr_rescue_success_rate_by_engine: ocrRescue.applied ? 1 : 0,
+                    ingest_ocr_latency_ms: Math.round(providerResult.latencyMs),
+                    chunk_count_after_ocr: ocrRescue.chunksAfter,
+                    ingest_ocr_warning_codes: ocrRescue.warnings,
+                });
+            }
+        }
+    }
+
+    ocrRescue.chunksAfter = chunks.length;
     const chunkTimeMs = performance.now() - chunkStart;
-    const totalTokens = chunks.reduce((sum, c) => sum + c.tokenCount, 0);
+    const totalTokens = chunks.reduce((sum, chunk) => sum + chunk.tokenCount, 0);
 
-    devLog(`   ✓ Created ${chunks.length} semantic chunks in ${chunkTimeMs.toFixed(0)}ms`);
-    devLog(`   ✓ Total tokens: ~${totalTokens}`);
+    devLog(`   Final chunks: ${chunks.length} in ${chunkTimeMs.toFixed(0)}ms`);
+    if (ocrRescue.attempted) {
+        devLog(`   OCR rescue attempted on ${ocrRescue.pagesAttempted} page(s), applied=${ocrRescue.applied}`);
+    } else if (ocrRescue.warnings.length > 0) {
+        devLog(`   OCR rescue warnings: ${ocrRescue.warnings.join(', ')}`);
+    }
+    devLog(`   Total tokens: ~${totalTokens}`);
+
+    // =========================================================================
+    // STEP 2.5: Template diagnostics and boilerplate classification
+    // =========================================================================
+    devLog('\nStep 2.5: Template diagnostics...');
+    const templateResult = await detectTemplateForDocument({
+        buffer,
+        mimeType,
+        document: {
+            ...document,
+            pages: workingPages,
+        },
+        chunks,
+        templateProfileId: options.templateProfileId,
+    });
+    const boilerplateChunkIndexes = templateResult.boilerplateChunkIndexes;
+    const indexedChunkEntries = chunks
+        .map((chunk, index) => ({ chunk, index }))
+        .filter((entry) => !boilerplateChunkIndexes.has(entry.index));
+
+    devLog(`   Template matched: ${templateResult.diagnostics.matched ? 'yes' : 'no'}`);
+    devLog(`   Boilerplate chunks filtered: ${boilerplateChunkIndexes.size}`);
+    devLog(`   Indexable chunks: ${indexedChunkEntries.length}`);
+    logInfo('Template ingest telemetry', {
+        route: 'ingest',
+        stage: 'template',
+        template_match_rate: templateResult.diagnostics.matched ? 1 : 0,
+        template_boilerplate_chunks_filtered: boilerplateChunkIndexes.size,
+        ocr_fallback_rate: templateResult.diagnostics.detectionMode === 'ocr' || templateResult.diagnostics.detectionMode === 'hybrid' ? 1 : 0,
+    });
 
     // =========================================================================
     // STEP 3: Generate Embeddings
     // =========================================================================
-    devLog('\n🧠 Step 3: Generating embeddings...');
+    devLog('\nStep 3: Generating embeddings...');
     const embedStart = performance.now();
 
     let embeddingApiCalls = 0;
-    let chunkEmbeddings: number[][] = [];
+    const embeddingByChunkIndex = new Map<number, number[]>();
 
-    if (options.skipEmbedding || !isEmbedderConfigured()) {
-        devLog('   ⚠️ Embedding skipped (API key not configured or skipEmbedding=true)');
-        // Create placeholder zero vectors
-        chunkEmbeddings = chunks.map(() => new Array(768).fill(0));
+    if (indexedChunkEntries.length === 0) {
+        devLog('   Embedding skipped (no indexable chunks after template filtering)');
+    } else if (options.skipEmbedding || !isEmbedderConfigured()) {
+        devLog('   Embedding skipped (API key not configured or skipEmbedding=true)');
+        for (const entry of indexedChunkEntries) {
+            embeddingByChunkIndex.set(entry.index, new Array(768).fill(0));
+        }
     } else {
         const embedResult = await embedTexts(
-            chunks.map(c => c.text),
-            DEFAULT_EMBEDDER_CONFIG
+            indexedChunkEntries.map((entry) => entry.chunk.text),
+            DEFAULT_EMBEDDER_CONFIG,
         );
-        chunkEmbeddings = embedResult.embeddings.map(e => e.embedding);
+        for (const embedding of embedResult.embeddings) {
+            const mapped = indexedChunkEntries[embedding.index];
+            if (!mapped) continue;
+            embeddingByChunkIndex.set(mapped.index, embedding.embedding);
+        }
+        for (const entry of indexedChunkEntries) {
+            if (!embeddingByChunkIndex.has(entry.index)) {
+                embeddingByChunkIndex.set(entry.index, new Array(768).fill(0));
+            }
+        }
         embeddingApiCalls = embedResult.apiCalls;
-        devLog(`   ✓ Generated ${embedResult.embeddings.length} embeddings in ${embedResult.processingTimeMs.toFixed(0)}ms`);
-        devLog(`   ✓ API calls: ${embeddingApiCalls}`);
+        devLog(`   Generated ${embedResult.embeddings.length} embeddings in ${embedResult.processingTimeMs.toFixed(0)}ms`);
+        devLog(`   API calls: ${embeddingApiCalls}`);
     }
 
     const embedTimeMs = performance.now() - embedStart;
@@ -147,13 +429,14 @@ export async function processPipeline(
     // =========================================================================
     // STEP 4: Store in Database
     // =========================================================================
-    devLog('\n💾 Step 4: Storing in database...');
+    devLog('\nStep 4: Storing in database...');
     const storeStart = performance.now();
 
     let documentId = '';
+    let slangCandidates = 0;
 
     if (options.skipStorage) {
-        devLog('   ⚠️ Storage skipped (skipStorage=true)');
+        devLog('   Storage skipped (skipStorage=true)');
         documentId = 'skipped';
     } else {
         try {
@@ -176,50 +459,111 @@ export async function processPipeline(
                 const [doc] = await tx.insert(documents).values({
                     userId: userId!,
                     filename,
+                    originalFilename: options.originalFilename || normalizeDisplayFilename(filename),
                     fileHash,
                     mimeType,
                     fileSize: buffer.length,
                     pageCount: document.pageCount,
                     accessLevel,
+                    folderName: options.folderName ?? null,
                     processingStatus: 'processing',
+                    templateProfileId: templateResult.diagnostics.profileId,
+                    templateMatched: templateResult.diagnostics.matched,
+                    templateMatchScore: templateResult.diagnostics.matchScore,
+                    templateBoilerplateChunks: templateResult.diagnostics.boilerplateChunks,
+                    templateDetectionMode: templateResult.diagnostics.detectionMode === 'none'
+                        ? null
+                        : templateResult.diagnostics.detectionMode,
+                    templateWarnings: templateResult.diagnostics.warnings.length > 0
+                        ? templateResult.diagnostics.warnings
+                        : null,
+                    ocrRescueApplied: ocrRescue.applied,
+                    ocrRescueEngine: ocrRescue.engine,
+                    ocrRescueFallbackEngine: ocrRescue.fallbackEngine,
+                    ocrRescueChunksRecovered: Math.max(0, ocrRescue.chunksAfter - ocrRescue.chunksBefore),
+                    ocrRescueWarnings: ocrRescue.warnings.length > 0
+                        ? ocrRescue.warnings
+                        : null,
                 }).returning();
 
                 documentId = doc.id;
-                devLog(`   ✓ Created document: ${documentId}`);
+                devLog(`   Created document: ${documentId}`);
 
-                // Prepare chunk records
-                const chunkRecords = chunks.map((chunk, index) => ({
-                    documentId: doc.id,
-                    content: chunk.text,
-                    contentHash: sha256(chunk.text),
-                    embedding: chunkEmbeddings[index],
-                    pageNumber: chunk.page,
-                    boundingBox: chunk.bbox,
-                    parentHeader: chunk.parentHeader || null,
-                    chunkIndex: index,
-                    tokenCount: chunk.tokenCount,
-                    accessLevel,
-                    // Generate Czech full-text search vector
-                    ftsVector: sql`to_tsvector('czech', ${chunk.text})`,
-                }));
+                // Prepare chunk records.
+                const chunkRecords = chunks.map((chunk, index) => {
+                    const isTemplateBoilerplate = boilerplateChunkIndexes.has(index);
+                    return {
+                        documentId: doc.id,
+                        content: chunk.text,
+                        contentHash: sha256(chunk.text),
+                        embedding: isTemplateBoilerplate
+                            ? null
+                            : (embeddingByChunkIndex.get(index) ?? new Array(768).fill(0)),
+                        pageNumber: chunk.page,
+                        boundingBox: chunk.bbox,
+                        highlightBoxes: buildHighlightBoxes(chunk),
+                        highlightText: buildHighlightText(chunk),
+                        parentHeader: chunk.parentHeader || null,
+                        chunkIndex: index,
+                        tokenCount: chunk.tokenCount,
+                        accessLevel,
+                        isTemplateBoilerplate,
+                        // Generate Czech full-text search vector
+                        ftsVector: isTemplateBoilerplate
+                            ? null
+                            : sql`to_tsvector('czech', ${chunk.text})`,
+                    };
+                });
+                const documentFinalStatus = chunkRecords.filter(r => !r.isTemplateBoilerplate).length > 0
+                    ? 'completed'
+                    : 'failed';
+                const documentProcessingError = documentFinalStatus === 'failed'
+                    ? EMPTY_INDEXABLE_TEXT_ERROR
+                    : null;
 
-                // Batch insert chunks (100 at a time for Supabase)
+                // Batch insert chunks (100 at a time for Supabase).
                 const BATCH_SIZE = 100;
                 for (let i = 0; i < chunkRecords.length; i += BATCH_SIZE) {
                     const batch = chunkRecords.slice(i, i + BATCH_SIZE);
                     await tx.insert(chunksTable).values(batch);
-                    devLog(`   ✓ Inserted chunk batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunkRecords.length / BATCH_SIZE)}`);
+                    devLog(`   Inserted chunk batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunkRecords.length / BATCH_SIZE)}`);
                 }
 
-                // Update document status to completed
+                // Update document status after chunk persistence.
                 await tx.update(documents)
                     .set({
-                        processingStatus: 'completed',
+                        processingStatus: documentFinalStatus,
+                        processingError: documentProcessingError,
+                        templateProfileId: templateResult.diagnostics.profileId,
+                        templateMatched: templateResult.diagnostics.matched,
+                        templateMatchScore: templateResult.diagnostics.matchScore,
+                        templateBoilerplateChunks: templateResult.diagnostics.boilerplateChunks,
+                        templateDetectionMode: templateResult.diagnostics.detectionMode === 'none'
+                            ? null
+                            : templateResult.diagnostics.detectionMode,
+                        templateWarnings: templateResult.diagnostics.warnings.length > 0
+                            ? templateResult.diagnostics.warnings
+                            : null,
+                        ocrRescueApplied: ocrRescue.applied,
+                        ocrRescueEngine: ocrRescue.engine,
+                        ocrRescueFallbackEngine: ocrRescue.fallbackEngine,
+                        ocrRescueChunksRecovered: Math.max(0, ocrRescue.chunksAfter - ocrRescue.chunksBefore),
+                        ocrRescueWarnings: ocrRescue.warnings.length > 0
+                            ? ocrRescue.warnings
+                            : null,
+                        folderName: doc.folderName,
                         updatedAt: new Date(),
                     })
                     .where(eq(documents.id, doc.id));
 
-                devLog(`   ✓ Document status: completed`);
+                devLog(`   Document status: ${documentFinalStatus}`);
+                logInfo('Ingest final status', {
+                    route: 'ingest',
+                    stage: 'storage',
+                    document_id: doc.id,
+                    document_final_status: documentFinalStatus,
+                    chunk_count_after_ocr: chunks.length,
+                });
             });
         } catch (error) {
             logError('Storage error in ingestion pipeline', { filename, mimeType }, error);
@@ -230,31 +574,57 @@ export async function processPipeline(
     const storeTimeMs = performance.now() - storeStart;
 
     // =========================================================================
+    // STEP 5: Slang candidate extraction for RAG v2
+    // =========================================================================
+    const ragV2Flags = getRagV2Flags();
+    if (!options.skipStorage && ragV2Flags.graphEnabled && documentId !== 'skipped' && indexedChunkEntries.length > 0) {
+        try {
+            const allChunkText = indexedChunkEntries.map((entry) => entry.chunk.text).join('\n');
+            slangCandidates = await ingestSlangCandidates(allChunkText, {
+                sourceType: 'ingest',
+                documentId,
+            });
+            devLog(`   RAG v2 term candidates ingested: ${slangCandidates}`);
+        } catch (error) {
+            logError('RAG v2 slang candidate ingestion failed', { route: 'ingest', stage: 'slang-candidates' }, error);
+        }
+    }
+
+    // =========================================================================
     // FINAL: Statistics
     // =========================================================================
     const totalTimeMs = performance.now() - startTime;
 
     devLog(`\n${'='.repeat(60)}`);
-    devLog(`📊 Pipeline Complete - Statistics`);
+    devLog('Pipeline Complete - Statistics');
     devLog(`${'='.repeat(60)}`);
     devLog(`   Document ID:   ${documentId}`);
     devLog(`   Pages:         ${document.pageCount}`);
     devLog(`   Text blocks:   ${totalTextBlocks}`);
     devLog(`   Chunks:        ${chunks.length}`);
+    devLog(`   Indexable:     ${indexedChunkEntries.length}`);
+    devLog(`   Boilerplate:   ${boilerplateChunkIndexes.size}`);
+    devLog(`   OCR rescue:    ${ocrRescue.attempted ? `${ocrRescue.chunksBefore} -> ${ocrRescue.chunksAfter}` : 'not attempted'}`);
     devLog(`   Total tokens:  ~${totalTokens}`);
-    devLog(`   ─────────────────────────────`);
+    devLog('   -----------------------------');
     devLog(`   Parse time:    ${parseTimeMs.toFixed(0)}ms`);
     devLog(`   Chunk time:    ${chunkTimeMs.toFixed(0)}ms`);
     devLog(`   Embed time:    ${embedTimeMs.toFixed(0)}ms`);
     devLog(`   Store time:    ${storeTimeMs.toFixed(0)}ms`);
-    devLog(`   ─────────────────────────────`);
+    devLog('   -----------------------------');
     devLog(`   Total time:    ${totalTimeMs.toFixed(0)}ms`);
+    devLog(`   Slang terms:   ${slangCandidates}`);
     devLog(`${'='.repeat(60)}\n`);
 
     return {
         documentId,
-        document,
+        document: {
+            ...document,
+            pages: workingPages,
+        },
         chunks,
+        template: templateResult.diagnostics,
+        ocrRescue,
         stats: {
             parseTimeMs,
             chunkTimeMs,
@@ -266,6 +636,9 @@ export async function processPipeline(
             totalTextBlocks,
             totalTokens,
             embeddingApiCalls,
+            slangCandidates,
+            indexableChunkCount: indexedChunkEntries.length,
+            boilerplateChunkCount: boilerplateChunkIndexes.size,
         },
     };
 }
@@ -275,8 +648,6 @@ export async function processPipeline(
 // ============================================================================
 
 async function main() {
-    // Environment variables already loaded at the top
-
     const args = process.argv.slice(2);
 
     if (args.length === 0) {
@@ -309,14 +680,13 @@ async function main() {
             skipEmbedding,
         });
 
-        // Show chunk preview
-        devLog('📦 Sample Chunks:');
+        // Show chunk preview.
+        devLog('Sample Chunks:');
         for (const chunk of result.chunks.slice(0, 2)) {
             devLog(`\n[Chunk ${chunk.index}] Page ${chunk.page}, ~${chunk.tokenCount} tokens`);
             devLog(`   Header: ${chunk.parentHeader || '(none)'}`);
             devLog(`   Preview: "${chunk.text.slice(0, 100).replace(/\n/g, ' ')}..."`);
         }
-
     } catch (error) {
         logError('Pipeline CLI error', { route: 'ingest', stage: 'cli' }, error);
         process.exit(1);
@@ -324,7 +694,7 @@ async function main() {
 }
 
 if (require.main === module) {
-    main();
+    void main();
 }
 
 // Re-export types

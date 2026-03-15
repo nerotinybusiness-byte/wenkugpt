@@ -267,29 +267,79 @@ function splitLongSegment(
     return chunks;
 }
 
+function normalizeForMatch(text: string): string {
+    return text
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function tokenizeForMatch(text: string): string[] {
+    return normalizeForMatch(text)
+        .split(/\s+/)
+        .filter((token) => token.length >= 3);
+}
+
 /**
  * Find text blocks that are within a text segment
  * Used for merging bounding boxes
  */
 function findBlocksForSegment(
     segment: string,
-    allBlocks: TextBlock[]
+    pageBlocks: TextBlock[],
+    maxMatches: number = 64,
 ): TextBlock[] {
-    const matchingBlocks: TextBlock[] = [];
-    const segmentWords = new Set(
-        segment.toLowerCase().split(/\s+/).filter(w => w.length > 3)
-    );
+    if (pageBlocks.length === 0) return [];
 
-    for (const block of allBlocks) {
-        const blockWords = block.text.toLowerCase().split(/\s+/);
-        // Check if any significant words from this block appear in the segment
-        const hasMatch = blockWords.some(w => w.length > 3 && segmentWords.has(w));
-        if (hasMatch || segment.includes(block.text)) {
-            matchingBlocks.push(block);
+    const normalizedSegment = normalizeForMatch(segment);
+    const segmentTokens = new Set(tokenizeForMatch(segment));
+
+    const scoredBlocks = pageBlocks.map((block) => {
+        const rawText = block.text.trim();
+        if (!rawText) {
+            return { block, score: 0, overlapCount: 0, tokenRatio: 0, exact: false, containsRaw: false };
         }
-    }
 
-    return matchingBlocks;
+        const normalizedBlock = normalizeForMatch(rawText);
+        const blockTokens = tokenizeForMatch(rawText);
+        const overlapCount = blockTokens.filter((token) => segmentTokens.has(token)).length;
+        const tokenRatio = blockTokens.length > 0 ? overlapCount / blockTokens.length : 0;
+        const exact = normalizedBlock.length >= 6 && normalizedSegment.includes(normalizedBlock);
+        const containsRaw = rawText.length >= 8 && segment.includes(rawText);
+
+        const score = (exact ? 3 : 0)
+            + (containsRaw ? 2 : 0)
+            + overlapCount
+            + tokenRatio;
+
+        return { block, score, overlapCount, tokenRatio, exact, containsRaw };
+    });
+
+    const strongMatches = scoredBlocks.filter((entry) => (
+        entry.exact
+        || entry.containsRaw
+        || entry.overlapCount >= 2
+        || entry.tokenRatio >= 0.5
+    ));
+
+    const fallbackMatches = scoredBlocks.filter((entry) => (
+        entry.exact
+        || entry.containsRaw
+        || entry.overlapCount > 0
+    ));
+
+    const selected = (strongMatches.length > 0 ? strongMatches : fallbackMatches)
+        .sort((a, b) => (
+            (b.score - a.score)
+            || (a.block.bbox.y - b.block.bbox.y)
+            || (a.block.bbox.x - b.block.bbox.x)
+        ))
+        .slice(0, maxMatches)
+        .map((entry) => entry.block);
+
+    return selected;
 }
 
 /**
@@ -303,8 +353,11 @@ export function chunkDocument(
     const { maxTokens, overlapPercent, minTokens } = config;
     const chunks: SemanticChunk[] = [];
 
-    // Collect all text blocks for bounding box lookup
-    const allBlocks: TextBlock[] = pages.flatMap(p => p.textBlocks);
+    // Collect text blocks by page for page-local bounding box lookup.
+    const blocksByPage = new Map<number, TextBlock[]>();
+    for (const page of pages) {
+        blocksByPage.set(page.pageNumber, page.textBlocks);
+    }
 
     // Combine all page text
     const fullText = pages.map(p => p.fullText).join('\n\n');
@@ -327,7 +380,8 @@ export function chunkDocument(
         // If segment fits within limit, create one chunk
         if (tokenCount <= maxTokens) {
             if (tokenCount >= minTokens) {
-                const matchingBlocks = findBlocksForSegment(currentSegment, allBlocks);
+                const pageBlocks = blocksByPage.get(currentPage) || [];
+                const matchingBlocks = findBlocksForSegment(currentSegment, pageBlocks);
                 chunks.push({
                     text: currentSegment.trim(),
                     page: currentPage,
@@ -344,7 +398,8 @@ export function chunkDocument(
             for (const subChunk of subChunks) {
                 const subTokenCount = estimateTokenCount(subChunk);
                 if (subTokenCount >= minTokens) {
-                    const matchingBlocks = findBlocksForSegment(subChunk, allBlocks);
+                    const pageBlocks = blocksByPage.get(currentPage) || [];
+                    const matchingBlocks = findBlocksForSegment(subChunk, pageBlocks);
                     chunks.push({
                         text: subChunk,
                         page: currentPage,

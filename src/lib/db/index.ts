@@ -4,6 +4,7 @@ import * as schema from './schema';
 
 // Validate environment variable at module load
 const connectionString = process.env.DATABASE_URL;
+// Ops note: production DATABASE_URL should point to the provider's pooled endpoint.
 
 if (!connectionString) {
     throw new Error(
@@ -20,7 +21,8 @@ const pool = new Pool({
     connectionString,
     max: 10,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
+    // Slightly higher connect timeout reduces transient failures during request bursts.
+    connectionTimeoutMillis: 10000,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined, // Supabase requires SSL
 });
 

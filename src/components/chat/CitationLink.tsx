@@ -13,8 +13,12 @@ export interface CitationPayload {
     chunkId: string;
     pageNumber: number;
     boundingBox: { x: number; y: number; width: number; height: number } | null;
+    highlightBoxes?: Array<{ x: number; y: number; width: number; height: number }> | null;
+    highlightText?: string | null;
     filename?: string;
+    originalFilename?: string | null;
     title?: string;
+    contextText?: string;
 }
 
 interface CitationLinkProps {
@@ -26,10 +30,18 @@ interface CitationLinkProps {
     pageNumber: number;
     /** Bounding box coordinates */
     boundingBox: { x: number; y: number; width: number; height: number } | null;
+    /** Fine-grained highlight boxes */
+    highlightBoxes?: Array<{ x: number; y: number; width: number; height: number }> | null;
+    /** Ingest-time short snippet for text-layer anchoring */
+    highlightText?: string | null;
     /** Source filename */
     filename?: string;
+    /** Original document filename for UI */
+    originalFilename?: string | null;
     /** Source title (legacy fallback) */
     title?: string;
+    /** Nearby answer text around the citation marker (used for precise text-layer highlight) */
+    contextText?: string;
     /** Callback when citation is clicked */
     onCitationClick?: (citation: CitationPayload) => void;
 }
@@ -39,8 +51,12 @@ export default function CitationLink({
     chunkId,
     pageNumber,
     boundingBox,
+    highlightBoxes,
+    highlightText,
     filename,
+    originalFilename,
     title,
+    contextText,
     onCitationClick,
 }: CitationLinkProps) {
     const handleClick = useCallback(() => {
@@ -50,10 +66,14 @@ export default function CitationLink({
             chunkId,
             pageNumber,
             boundingBox,
+            highlightBoxes,
+            highlightText,
             filename,
+            originalFilename,
             title,
+            contextText,
         });
-    }, [id, chunkId, pageNumber, boundingBox, filename, title, onCitationClick]);
+    }, [id, chunkId, pageNumber, boundingBox, highlightBoxes, highlightText, filename, originalFilename, title, contextText, onCitationClick]);
 
     return (
         <button

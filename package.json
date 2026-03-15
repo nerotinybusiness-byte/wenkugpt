@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "postinstall": "node scripts/sync_model_viewer_decoders.mjs",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint src",
@@ -13,6 +14,11 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:introspect": "drizzle-kit introspect",
+    "db:check-ingest-schema": "npx tsx scripts/check_ingest_schema.ts --strict",
+    "template:build-profile": "npx tsx scripts/build_template_profile.ts",
+    "model:optimize:bejroska": "node scripts/optimize_bejroska_model.mjs",
+    "model:build:bejroska-png": "node scripts/build_bejroska_png_models.mjs",
+    "smoke:chat-load": "node scripts/smoke_chat_load.mjs",
     "test": "vitest",
     "test:run": "vitest run"
   },
@@ -21,6 +27,7 @@
     "@ai-sdk/google": "^3.0.21",
     "@clerk/nextjs": "^7.0.4",
     "@google/generative-ai": "^0.24.1",
+    "@google/model-viewer": "^4.1.0",
     "@napi-rs/canvas": "^0.1.80",
     "@radix-ui/react-dialog": "^1.1.15",
     "@supabase/supabase-js": "^2.95.3",
@@ -48,6 +55,7 @@
     "react-syntax-highlighter": "^16.1.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.4.0",
+    "tesseract.js": "^7.0.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"
   },

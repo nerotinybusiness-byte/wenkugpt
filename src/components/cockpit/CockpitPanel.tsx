@@ -25,10 +25,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { useSettings, GEMINI_MODELS, CLAUDE_MODELS } from '@/lib/settings/store';
+import { useSettings, RAG_ENGINES, GEMINI_MODELS, CLAUDE_MODELS, type RAGEngineId } from '@/lib/settings/store';
 
 export default function CockpitPanel() {
     const {
+        ragEngine,
         vectorWeight,
         topK,
         minRelevance,
@@ -38,6 +39,7 @@ export default function CockpitPanel() {
         enableAuditor,
         confidenceThreshold,
         lastStats,
+        setRagEngine,
         setVectorWeight,
         setTopK,
         setMinRelevance,
@@ -147,6 +149,25 @@ export default function CockpitPanel() {
                         </h3>
 
                         <div className="glass-light p-4 rounded-xl space-y-4">
+                            <div className="space-y-2">
+                                <Label className="text-xs">RAG Engine</Label>
+                                <Select value={ragEngine} onValueChange={(value) => setRagEngine(value as RAGEngineId)}>
+                                    <SelectTrigger className="w-full bg-white/5">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {RAG_ENGINES.map(engine => (
+                                            <SelectItem key={engine.id} value={engine.id}>
+                                                <div className="flex flex-col">
+                                                    <span>{engine.name}</span>
+                                                    <span className="text-xs text-white/50">{engine.description}</span>
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
                             {/* Generator Model */}
                             <div className="space-y-2">
                                 <Label className="text-xs">Generator (Gemini)</Label>

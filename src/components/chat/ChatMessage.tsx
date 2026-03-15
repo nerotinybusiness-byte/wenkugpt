@@ -10,9 +10,71 @@ interface Source {
     chunkId: string;
     pageNumber: number;
     boundingBox: { x: number; y: number; width: number; height: number } | null;
+    highlightBoxes?: Array<{ x: number; y: number; width: number; height: number }> | null;
+    highlightText?: string | null;
     content: string;
     filename?: string;
+    originalFilename?: string | null;
     title?: string;
+}
+
+const MAX_CONTEXT_LENGTH = 320;
+
+function normalizeContextText(value: string): string {
+    return value.replace(/\s+/g, ' ').trim();
+}
+
+function truncateContext(value: string, maxLength: number = MAX_CONTEXT_LENGTH): string {
+    return normalizeContextText(value).slice(0, maxLength);
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function extractCitationContext(content: string, citationIndex: number, citationLength: number): string {
+    const left = content.slice(0, citationIndex);
+    const leftBoundary = Math.max(
+        left.lastIndexOf('\n'),
+        left.lastIndexOf('.'),
+        left.lastIndexOf('!'),
+        left.lastIndexOf('?'),
+    );
+    const leftText = left.slice(Math.max(0, leftBoundary + 1)).trim().slice(-220);
+
+    const right = content.slice(citationIndex + citationLength);
+    const rightCandidates = [
+        right.indexOf('\n'),
+        right.indexOf('.'),
+        right.indexOf('!'),
+        right.indexOf('?'),
+    ].filter((value) => value >= 0);
+    const rightBoundary = rightCandidates.length > 0 ? Math.min(...rightCandidates) : Math.min(right.length, 140);
+    const rightText = right.slice(0, rightBoundary).trim().slice(0, 140);
+
+    return truncateContext(`${leftText} ${rightText}`);
+}
+
+export function buildInlineCitationContext(content: string, citationIndex: number, citationLength: number): string {
+    const snippet = extractCitationContext(content, citationIndex, citationLength);
+    return snippet || truncateContext(content);
+}
+
+export function buildFooterCitationContext(
+    content: string,
+    citationId: string,
+    highlightText?: string | null,
+): string {
+    const preferred = truncateContext(highlightText || '');
+    if (preferred) return preferred;
+
+    const citationPattern = new RegExp(`\\[${escapeRegExp(citationId)}\\]`);
+    const match = citationPattern.exec(content);
+    if (match) {
+        return buildInlineCitationContext(content, match.index, match[0].length);
+    }
+
+    return truncateContext(content);
 }
 
 interface ChatMessageProps {
@@ -22,6 +84,7 @@ interface ChatMessageProps {
         role: 'user' | 'assistant';
         sources?: Source[];
         isLoading?: boolean;
+        degraded?: boolean;
     };
     onRegenerate?: () => void;
     onCitationClick?: (citation: CitationPayload) => void;
@@ -47,6 +110,7 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
             const source = message.sources.find(s => s.id === citationId);
 
             if (source) {
+                const contextText = buildInlineCitationContext(message.content, match.index, match[0].length);
                 parts.push(
                     <CitationLink
                         key={`citation-${match.index}`}
@@ -54,8 +118,12 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
                         chunkId={source.chunkId}
                         pageNumber={source.pageNumber}
                         boundingBox={source.boundingBox}
+                        highlightBoxes={source.highlightBoxes}
+                        highlightText={source.highlightText}
                         filename={source.filename ?? source.title}
+                        originalFilename={source.originalFilename ?? source.filename ?? source.title}
                         title={source.title}
+                        contextText={contextText}
                         onCitationClick={onCitationClick}
                     />
                 );
@@ -112,6 +180,12 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
                         }
                     `}
                 >
+                    {!isUser && message.degraded && (
+                        <div className="mb-2 inline-flex rounded-md border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-[11px] font-medium text-amber-200">
+                            dočasný fallback
+                        </div>
+                    )}
+
                     {parsedContent}
 
                     {/* Citations/Sources Footer */}
@@ -124,8 +198,12 @@ export default function ChatMessage({ message, onRegenerate, onCitationClick }: 
                                     chunkId={source.chunkId}
                                     pageNumber={source.pageNumber}
                                     boundingBox={source.boundingBox}
+                                    highlightBoxes={source.highlightBoxes}
+                                    highlightText={source.highlightText}
                                     filename={source.filename ?? source.title}
+                                    originalFilename={source.originalFilename ?? source.filename ?? source.title}
                                     title={source.title}
+                                    contextText={buildFooterCitationContext(message.content, source.id || idx.toString(), source.highlightText)}
                                     onCitationClick={onCitationClick}
                                 />
                             ))}

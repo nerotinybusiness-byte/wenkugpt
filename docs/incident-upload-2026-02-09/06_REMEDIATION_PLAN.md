@@ -81,3 +81,81 @@ Tasks:
 
 Output:
 - Operationally stable and documented system.
+
+## Phase 6 - PDF citation highlight precision remediation (2026-02-10)
+Status: In progress
+
+Tasks:
+1. Ingest matching fix:
+   - enforce page-local block matching in `src/lib/ingest/chunker.ts`
+   - prevent cross-page source block merges for chunk bbox generation
+2. Highlight metadata hardening:
+   - sanitize/deduplicate/merge/cap `highlightBoxes` in `src/lib/ingest/pipeline.ts`
+3. Viewer fallback hardening:
+   - coarse detection for both single and multi-box highlight sets
+   - context-text narrowing fallback for coarse sets
+   - visible mode badge (`bbox` vs `context-text`) for diagnostics
+4. Verification:
+   - run `npx tsc --noEmit --incremental false`, `npm run lint`, `npm run test:run`
+   - run manual citation smoke test on known problematic query/doc
+5. Data rollout:
+   - clear old documents
+   - reupload/reingest full document set
+   - re-validate highlight precision
+
+Output:
+- Page-wide highlights no longer appear for targeted citation clicks on verified documents.
+
+## Phase 7 - Context anchor correctness hardening (2026-02-10)
+Status: In progress
+
+Tasks:
+1. Context payload narrowing:
+   - inline citations use only local answer snippet
+   - footer citations prefer ingest snippet (`highlightText`) and fallback to local answer snippet
+2. Dual-read data rollout:
+   - add nullable `chunks.highlight_text`
+   - wire through query + agent + API payloads
+3. Ingest snippet generation:
+   - build `highlightText` from ordered source blocks (`y,x`), normalize whitespace, cap length
+4. Viewer spatial validation hardening:
+   - region-first candidate selection from coarse boxes
+   - lexical + region coverage composite scoring
+   - spatial gate before accepting `context-text`
+   - deterministic `bbox-fallback` when spatial gate fails
+5. Cache correctness:
+   - key context cache by page + normalized context + highlight signature
+6. Validation:
+   - unit tests for context helpers and geometry helpers
+   - manual browser smoke on known problematic PDF
+
+Output:
+- `context-text` is reported only for spatially valid anchors.
+- Wrong top-strip anchors degrade to explicit `bbox-fallback` instead of false precision.
+
+## Phase 8 - Production schema alignment and ingest preflight hardening (2026-02-10)
+Status: Done
+
+Tasks:
+1. Restore service immediately:
+   - apply DB hotfix `ALTER TABLE public.chunks ADD COLUMN IF NOT EXISTS highlight_text text;`
+   - verify column exists + read query succeeds
+   - run production ingest smoke
+2. Add ingest schema preflight in runtime:
+   - implement `src/lib/db/schema-health.ts`
+   - check required `chunks` columns: `highlight_boxes`, `highlight_text`, `embedding`, `fts_vector`
+   - check required extension: `vector`
+   - cache preflight result for 60s
+3. Improve ingest error precision:
+   - map PG `42703` + `highlight_text` to explicit migration guidance
+   - add dedicated API error for schema mismatch (`INGEST_SCHEMA_MISMATCH`)
+4. Add operational guardrail:
+   - create `scripts/check_ingest_schema.ts` with `--strict` mode and non-zero exit on mismatch
+   - add `npm run db:check-ingest-schema` script
+5. Validation and rollout:
+   - run `npx tsc --noEmit --incremental false`, `npm run lint`, `npm run test:run`, `npm run build`
+   - verify production ingest after deploy
+
+Output:
+- No fresh ingest failures due to missing `chunks.highlight_text`.
+- Schema mismatch is detected early with operator-actionable message.

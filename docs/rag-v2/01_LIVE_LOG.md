@@ -1,0 +1,167 @@
+# RAG v2 Live Log
+
+Append-only execution log for `RAG v2 (Slang-aware Context Graph Memory)`.
+
+## 2026-02-10
+- Change made:
+  - created `docs/rag-v2` documentation skeleton (`00-07`).
+  - implemented `v2` core scaffolding in code:
+    - graph-memory schema tables (`concepts`, aliases, definitions, relationships, evidence, candidates, reviews)
+    - migration `drizzle/0002_rag_v2_graph_memory.sql`
+    - query flow module (`src/lib/rag-v2/query-flow.ts`)
+    - feature flags module (`src/lib/rag-v2/flags.ts`)
+    - ingestion candidate module (`src/lib/rag-v2/ingest.ts`)
+    - API/settings wiring for `contextScope`, `effectiveAt`, `ambiguityPolicy`, `engineMeta`
+- Files touched:
+  - `src/lib/db/schema.ts`
+  - `drizzle/0002_rag_v2_graph_memory.sql`
+  - `drizzle/meta/_journal.json`
+  - `src/lib/rag-v2/*`
+  - `src/lib/ai/agents.ts`
+  - `src/app/api/chat/route.ts`
+  - `src/lib/ingest/pipeline.ts`
+  - `src/lib/settings/store.ts`
+  - `src/components/chat/SettingsDialog.tsx`
+  - `src/components/chat/ChatPanel.tsx`
+  - `README.md`
+  - `docs/api.md`
+- Verification run:
+  - `npx tsc --noEmit --incremental false` passed
+  - `npm run lint` passed
+  - `npm run test:run` passed (32 tests)
+- Result:
+  - baseline implementation complete for v2 graph-memory scaffolding
+- New risk or blocker:
+  - runtime browser validation for new v2 context controls still pending
+- Next action:
+  - run browser checklist for `v2` (scope/effectiveAt/ambiguity behavior) and collect telemetry samples
+
+- Change made:
+  - implemented PDF viewer hardening pass:
+    - default zoom switched to `100%`
+    - continuous vertical scrolling across all pages
+    - document title now prefers human-readable `originalFilename`
+    - highlight payload extended for fine-grained `highlightBoxes[]` with fallback to legacy `boundingBox`
+  - implemented data-path support for precise highlights and display names:
+    - schema columns `documents.original_filename` and `chunks.highlight_boxes`
+    - migration `drizzle/0003_pdf_viewer_metadata.sql`
+    - ingest path now passes/stores original filename
+    - retrieval/API payload now includes `originalFilename` + `highlightBoxes`
+- Files touched:
+  - `src/lib/db/schema.ts`
+  - `drizzle/0003_pdf_viewer_metadata.sql`
+  - `drizzle/meta/_journal.json`
+  - `src/app/api/ingest/route.ts`
+  - `src/lib/ingest/pipeline.ts`
+  - `src/lib/db/queries.ts`
+  - `src/lib/ai/agents.ts`
+  - `src/app/api/chat/route.ts`
+  - `src/components/chat/CitationLink.tsx`
+  - `src/components/chat/ChatMessage.tsx`
+  - `src/components/chat/ChatPanel.tsx`
+  - `src/components/chat/PDFViewer.tsx`
+- Verification run:
+  - pending
+- Result:
+  - implementation complete, awaiting type/lint/test verification
+- New risk or blocker:
+  - database migration `0003_pdf_viewer_metadata.sql` must be applied before relying on new columns in production
+- Next action:
+  - run `npx tsc --noEmit --incremental false`, `npm run lint`, `npm run test:run`
+
+- Change made:
+  - removed ugly square border/texture around close `X` buttons in modal UI:
+    - tuned `PDFViewer` header close/fullscreen buttons to pure circular icon buttons
+    - tuned shared `Dialog` close control (`DialogPrimitive.Close`) to circular transparent style without square accent background
+- Files touched:
+  - `src/components/chat/PDFViewer.tsx`
+  - `src/components/ui/dialog.tsx`
+  - `docs/rag-v2/01_LIVE_LOG.md`
+- Verification run:
+  - `npm run lint` passed
+- Result:
+  - close icon styling now renders cleanly without the previous square edge
+- New risk or blocker:
+  - none
+- Next action:
+  - visual smoke in production (Settings modal + PDF viewer close controls)
+
+- Change made:
+  - fixed PDF viewer citation precision fallback for coarse highlights:
+    - when stored bbox is too broad, viewer now uses citation context text and `react-pdf` text layer span matching to compute tighter overlay boxes
+    - this reduces page-wide green overlays for targeted answers (e.g., address lines)
+  - fixed title normalization path in citation flow:
+    - display filename normalization now runs consistently for `originalFilename/title/filename` fallback order
+  - added citation context propagation (`ChatMessage` -> `CitationLink` -> `ChatPanel` -> `PDFViewer`)
+- Files touched:
+  - `src/components/chat/CitationLink.tsx`
+  - `src/components/chat/ChatMessage.tsx`
+  - `src/components/chat/ChatPanel.tsx`
+  - `src/components/chat/PDFViewer.tsx`
+  - `docs/rag-v2/01_LIVE_LOG.md`
+- Verification run:
+  - `npx tsc --noEmit --incremental false` passed
+  - `npm run lint` passed
+  - `npm run test:run` passed
+- Result:
+  - filename in PDF header is cleaner and coarse citation highlights are narrowed by context-aware text matching
+- New risk or blocker:
+  - text-layer matching quality depends on PDF text extraction fidelity
+- Next action:
+  - production smoke on problematic citation case (`kde je sklad wenku?`)
+
+- Change made:
+  - committed and deployed follow-up UI fixes:
+    - `fix(ui): clean close button border styling` (`072551b`)
+    - `fix(pdf-viewer): normalize title and tighten citation highlight` (`2ebd336`)
+  - deployed preview + production and validated deployment status (`Ready`).
+  - applied production DB patch for viewer metadata columns after migrate baseline conflict:
+    - `documents.original_filename`
+    - `chunks.highlight_boxes`
+- Deployment:
+  - preview: `https://wenkugpt-copy-ektirb5t3-nerotinys-projects.vercel.app`
+  - production: `https://wenkugpt-copy-fyz0zdwvv-nerotinys-projects.vercel.app`
+  - alias: `https://wenkugpt-copy.vercel.app`
+- Verification run:
+  - `npx tsc --noEmit --incremental false` passed
+  - `npm run lint` passed
+  - `npm run test:run` passed
+  - `npx vercel inspect wenkugpt-copy-fyz0zdwvv-nerotinys-projects.vercel.app` => `Ready`
+- Result:
+  - context-window handoff updated with commits, deploy links, and DB patch status
+- New risk or blocker:
+  - user-side visual validation on real problematic citation is still pending (possible PDF text-layer variance).
+- Next action:
+  - run manual production smoke with query `kde je sklad wenku?` and verify:
+    - filename normalization in PDF header
+    - highlight limited to address line (not page-wide overlay)
+
+- Change made:
+  - implemented end-to-end precision remediation for coarse PDF citation highlights:
+    - ingest chunk matching is now page-local (prevents cross-page bbox inflation)
+    - highlight box generation sanitizes, deduplicates, merges nearby boxes, and caps output count
+    - viewer coarse detection now supports multi-box coverage and not only single-box cases
+    - viewer footer now shows explicit highlight mode (`bbox` or `context-text`)
+    - citation context payload around `[n]` markers now includes both local sentence context and source snippet
+    - diagnostics script `scripts/check_bboxes.ts` now reports highlight density/coarse indicators
+  - added regression tests for page-local chunk matching and highlight utility heuristics.
+- Files touched:
+  - `src/lib/ingest/chunker.ts`
+  - `src/lib/ingest/pipeline.ts`
+  - `src/components/chat/PDFViewer.tsx`
+  - `src/components/chat/ChatMessage.tsx`
+  - `src/components/chat/pdfHighlightUtils.ts`
+  - `src/components/chat/__tests__/pdfHighlightUtils.test.ts`
+  - `src/lib/ingest/__tests__/chunker.test.ts`
+  - `scripts/check_bboxes.ts`
+- Verification run:
+  - `npx tsc --noEmit --incremental false` passed
+  - `npm run lint` passed
+  - `npm run test:run` passed (38 tests)
+  - `npm run build` passed
+- Result:
+  - code changes in place for end-to-end precision fix; automated gates are green; runtime verification pending
+- New risk or blocker:
+  - legacy documents still require reupload/reingest to fully benefit from ingest-side precision updates
+- Next action:
+  - run static gates + tests, then reupload docs and execute manual citation smoke

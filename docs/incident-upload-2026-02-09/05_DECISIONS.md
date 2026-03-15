@@ -10,6 +10,9 @@
    - localStorage keys (`x-user-email`, `wenkugpt:user-email`, `userEmail`)
    - sessionStorage keys (`x-user-email`, `wenkugpt:user-email`, `userEmail`)
    - temporary fallback: `admin@example.com`
+6. PDF citation precision will be fixed end-to-end (ingest + viewer + tests), not viewer-only.
+7. Legacy documents will be reuploaded/reingested after deployment instead of DB-side bbox migration.
+8. PDF viewer will show highlight mode (`bbox` vs `context-text`) for easier runtime debugging.
 
 ## Process decision (new)
 - User requested full continuity across windows.

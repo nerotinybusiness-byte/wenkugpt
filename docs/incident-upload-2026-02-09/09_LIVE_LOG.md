@@ -57,6 +57,136 @@ Use this file as append-only progress log.
   - `https://wenkugpt-copy-22h90gzbc-nerotinys-projects.vercel.app`
   - alias `https://wenkugpt-copy.vercel.app` updated.
 
+- Closed UI/docs follow-up:
+  - fixed chat history class typo `truncat` -> `truncate` in `src/components/chat/ChatPanel.tsx`.
+  - removed obsolete `ALLOW_HEADERLESS_AUTH` from `.env.example`.
+  - documented unsupported status of `ALLOW_HEADERLESS_AUTH` in `README.md` and `docs/api.md`.
+  - updated risk register entry for env/docs drift as resolved.
+- EOD handoff prepared for 2026-02-10: `17_EOD_HANDOFF_2026-02-09.md` with summary, open items, and restart checklist.
+
+## 2026-02-10
+- Started RAG v2 implementation track (`Slang-aware Context Graph Memory`) on branch `feat/rag-engine-switch`.
+- Added dedicated v2 documentation and append-only live log under `docs/rag-v2/`.
+- Implemented v2 graph-memory schema + migration, query flow scaffolding, feature flags, and API wiring.
+- Extended Settings payload for scoped/temporal/ambiguity controls.
+- Validation after v2 implementation:
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run test:run` passed (32 tests).
+- Started end-to-end PDF highlight precision remediation after user approval:
+  - decision confirmed: full code fix + full document reupload/reingest.
+  - implemented ingest matching hardening in `src/lib/ingest/chunker.ts` (page-local block matching).
+  - implemented highlight metadata hardening in `src/lib/ingest/pipeline.ts` (sanitize/dedupe/merge/cap).
+  - implemented viewer hardening in `src/components/chat/PDFViewer.tsx`:
+    - coarse detection for multi-box highlight sets
+    - tighter context-text fallback thresholding
+    - visible highlight mode label (`bbox` vs `context-text`)
+  - improved citation context composition in `src/components/chat/ChatMessage.tsx`.
+  - expanded diagnostics in `scripts/check_bboxes.ts` to include highlight box density/coarse indicators.
+  - added regression tests:
+    - `src/lib/ingest/__tests__/chunker.test.ts` (page-local sourceBlocks)
+    - `src/components/chat/__tests__/pdfHighlightUtils.test.ts`
+- Current status: implementation in progress; static/test gate run pending; runtime validation pending reupload.
+- Ran static/test gates for remediation branch:
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run test:run` passed (38 tests).
+  - `npm run build` passed.
+- Current status: code changes and automated gates are green; pending runtime validation after document reupload/reingest.
+- Executed data reset and reingest workflow:
+  - `node scripts/clear_docs.js` completed.
+  - `node scripts/check_files.js` confirmed `Total documents in DB: 0`.
+  - Supabase bucket `documents` list confirmed `74` objects, `72` supported (`.pdf/.txt`).
+  - Bulk reingest via `processPipeline` from storage completed `72/72` success, `0` failures.
+  - DB post-check after dedupe: `22` unique documents.
+- Smoke retrieval check run for query `kde je sklad wenku?`:
+  - retrieval returned relevant Wenku sources and address snippets (`Na Hanspaulce ...`).
+  - source highlight metadata still classified as coarse on several top hits, but no ingest/runtime failures.
+- Root cause refinement found in viewer fallback:
+  - context-text narrowing in `PDFViewer` previously attempted only once after 220ms.
+  - when text layer was not ready in that window, coarse highlight fallback persisted.
+- Implemented viewer hotfix in `src/components/chat/PDFViewer.tsx`:
+  - retry loop for context-text highlight resolution.
+  - temporary suppression of coarse overlay while refinement is in progress.
+  - status chip `Refining highlight...` during narrowing.
+- Re-ran validation after hotfix:
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run test:run` passed (38 tests).
+- Current status: reingest + smoke checks complete; final manual browser confirmation of citation highlight precision is pending.
+- Additional root-cause review confirmed a second-order issue:
+  - viewer can report `context-text` while highlight is mis-anchored (thin top strip) on known problematic PDF page.
+- Implementation started for deep-fix track (dual-read + spatial gate):
+  - added `highlightText` plumbing in source payload types and chat API mapping.
+  - added DB migration scaffold for `chunks.highlight_text`.
+  - added ingest snippet generation for `highlight_text`.
+  - rewired viewer context cache key to page + normalized context + highlight signature.
+  - replaced global lexical span resolver with region-first resolver + spatial validation gate.
+  - added deterministic `bbox-fallback` mode and debug reason codes (`context_no_tokens`, `context_no_ranked_spans`, `context_spatial_gate_fail`, `context_bbox_fallback`).
+  - added unit tests for geometry/signature helpers and chat context payload helpers.
+- Validation after deep-fix implementation:
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run test:run` passed (`45/45`).
+  - `npm run build` passed.
+- Current status: code and automated gates are green; remaining work is browser regression matrix on known problematic citation flow.
+- Incident follow-up started for ingest runtime failure (`chunks.highlight_text`):
+  - confirmed real DB error code `42703` with message `column "highlight_text" does not exist`.
+  - verified production `chunks` schema had `highlight_boxes` but missing `highlight_text`.
+- Production restore actions executed:
+  - applied SQL hotfix: `ALTER TABLE public.chunks ADD COLUMN IF NOT EXISTS highlight_text text;`
+  - verified column presence via `information_schema.columns`.
+  - verified read query: `select highlight_text from public.chunks limit 1` succeeds.
+  - production ingest smoke (`POST /api/ingest` with admin header) returned `200` + `success: true`.
+- Hardening implementation started:
+  - added ingest schema preflight module (`src/lib/db/schema-health.ts`) with 60s cache.
+  - wired preflight assertion into `src/app/api/ingest/route.ts` before storage/upload pipeline.
+  - improved error mapping for PG `42703` (`highlight_text`) and added dedicated response code path `INGEST_SCHEMA_MISMATCH`.
+  - added guardrail script `scripts/check_ingest_schema.ts` + npm command `db:check-ingest-schema`.
+  - added test coverage for schema health and ingest error mapping.
+- Validation after hardening implementation:
+  - `npm run db:check-ingest-schema` passed.
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run test:run` passed (`50/50`).
+  - `npm run build` passed.
+- Deployment + post-deploy verification:
+  - committed and pushed hardening patch: `5de6f53`.
+  - production deployment: `https://wenkugpt-copy-g1jaynxhr-nerotinys-projects.vercel.app` (`Ready`).
+  - alias `https://wenkugpt-copy.vercel.app` updated.
+  - post-deploy ingest smoke (`POST /api/ingest` with admin header) returned `200` + `success: true`.
+- Current status: schema drift hotfix and ingest hardening are deployed and verified; monitor-only phase remains.
+
+- Started and completed local implementation track for template-aware PDF ingest (`Template-Aware PDF Ingest Proti Zmateni Chatu`):
+  - added template detection module with profile registry, 10% page sampling (`min 3`, `max 12`), visual/token fingerprints, and optional Gemini OCR fallback:
+    - `src/lib/ingest/template.ts`
+    - `config/template-profiles/wenku-manual-v1.json`
+    - `scripts/build_template_profile.ts`
+  - integrated template diagnostics and boilerplate classification into ingest pipeline:
+    - `src/lib/ingest/pipeline.ts`
+    - diagnostics persisted on `documents` (`templateProfileId`, `templateMatched`, `templateMatchScore`, `templateBoilerplateChunks`, `templateDetectionMode`, `templateWarnings`)
+    - boilerplate chunks marked via `chunks.is_template_boilerplate`
+    - boilerplate chunks excluded from embedding/FTS writes.
+  - added retrieval exclusion with rollout-safe feature flag guard:
+    - `src/lib/db/queries.ts` now filters boilerplate chunks only when `TEMPLATE_AWARE_FILTERING_ENABLED=true`.
+  - expanded ingest and documents API payloads:
+    - `POST /api/ingest` returns `data.template` diagnostics and supports `options.templateProfileId`.
+    - `GET /api/documents` returns template diagnostics fields.
+  - updated ingest/file-management UI:
+    - upload success status now surfaces template warnings/summary.
+    - document list surfaces template match metadata and warning/failure detail.
+  - added schema + migration:
+    - `drizzle/0005_template_aware_ingest.sql`
+    - updated schema preflight checks for new required columns (`chunks` + `documents`).
+  - docs/env updates:
+    - `docs/api.md`, `README.md`, `.env.example`.
+- Validation after template-aware implementation:
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run lint:scripts` passed.
+  - `npm run test:run` passed (`54/54`).
+- Current status:
+  - code + tests complete locally.
+  - pending operational rollout steps: apply DB migration `0005_template_aware_ingest.sql`, generate/tune reference profile from production PDF corpus, enable template feature flags gradually in preview/production.
 ## Next log entry template
 - Date:
 - Change made:
@@ -65,3 +195,160 @@ Use this file as append-only progress log.
 - Result:
 - New risk or blocker:
 - Next action:
+
+## 2026-02-11
+- Implemented OCR engine switch for empty/low chunk rescue with user-level setting (`gemini`/`tesseract`) and locked no-fallback policy.
+- Added ingest option + response contract fields:
+  - request: `emptyChunkOcrEngine`
+  - response: `ocrRescue.engine`, `ocrRescue.fallbackEngine`, `ocrRescue.engineUsed`
+- Added documents metadata fields:
+  - `ocrRescueEngine`, `ocrRescueFallbackEngine`
+- Added DB migration for OCR engine metadata:
+  - `drizzle/0007_ocr_engine_switch.sql`
+- Added provider abstraction and Tesseract backend path:
+  - `src/lib/ingest/ocr-provider.ts`
+  - `src/lib/ingest/ocr-tesseract.ts`
+  - `src/lib/ingest/ocr.ts` (Gemini provider export + unified failure mapping)
+- Pipeline wiring updated for engine-aware rescue + telemetry payload keys:
+  - `ingest_ocr_engine_usage`
+  - `ingest_ocr_engine_fallback_rate`
+  - `ingest_ocr_rescue_success_rate_by_engine`
+  - `ingest_ocr_latency_ms`
+  - `ingest_ocr_warning_codes`
+- Added/expanded test coverage:
+  - `ocr-provider.test.ts`
+  - `ocr-tesseract.test.ts`
+  - ingest route options/get tests
+  - documents pagination test
+  - schema-health test
+- Validation gates completed after OCR engine switch implementation:
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run test:run` passed (`75/75`).
+  - `npm run build` passed.
+- Current status: OCR engine switch changes are implemented and locally validated; migration `0007` rollout on target DB remains.
+
+- Executed production DB schema alignment for ingest/template/OCR tracks:
+  - applied SQL migrations on production DB: `0005_template_aware_ingest.sql`, `0006_empty_chunk_ocr_rescue.sql`, `0007_ocr_engine_switch.sql`.
+  - verified schema health via `npm run db:check-ingest-schema` -> `ingest_schema_ok=true` with no missing columns.
+- Ran production ingest smoke matrix on aliased app `https://wenkugpt-copy.vercel.app`:
+  - OCR rescue OFF: `POST /api/ingest` returned `200`, `success=true`, warning `ocr_rescue_disabled`.
+  - OCR rescue ON + engine `gemini`: `POST /api/ingest` returned `200`, `success=true`.
+  - OCR rescue ON + engine `tesseract`: `POST /api/ingest` returned `200`, `success=true`; provider-unavailable path stayed warning-only (`ocr_rescue_tesseract_unavailable`).
+  - `GET /api/documents?limit=1` returned `200`, `success=true`, and OCR metadata fields were readable (`ocrRescueEngine`, `ocrRescueFallbackEngine`).
+- Deployed latest production build:
+  - deployment id: `dpl_FjkzRouUgBSRjfyFCBYUr3m1H9EF`
+  - deployment URL: `https://wenkugpt-copy-2a7ezi84x-nerotinys-projects.vercel.app`
+  - alias `https://wenkugpt-copy.vercel.app` points to this deployment.
+- Current status: production schema and OCR engine rollout are aligned; final browser UX regression and telemetry monitoring continue.
+- Implemented ingest hardening for scan/image-only PDFs with weak text extraction:
+  - added OCR re-chunk fallback path (`minTokens=1`) when OCR returns short text but standard chunking yields `0` chunks.
+  - added warning code `ocr_rescue_short_text_fallback_chunk`.
+  - document persistence now marks ingest as `failed` when final `chunkRecords.length === 0` with explicit `processingError` (`No indexable text extracted from document (OCR produced no usable text).`).
+  - added final ingest telemetry/log fields for debugging: `chunk_count_after_ocr`, `document_final_status`.
+- Implemented preview API clarity for empty/failed docs:
+  - `GET /api/documents/[id]/preview` now loads document metadata first.
+  - returns `DOCUMENT_NOT_FOUND` when document does not exist.
+  - returns `DOCUMENT_PREVIEW_EMPTY` (409) for existing `failed` docs without chunks.
+- Updated ingest UI behavior to avoid false-success state:
+  - upload result now checks `data.stats.chunkCount` and sets error state when `chunkCount === 0`.
+  - file list disables preview button for `processingStatus='failed'` docs and shows explicit tooltip.
+- Validation after implementation:
+  - `npm run test:run -- src/lib/ingest/__tests__/ocr-rescue.test.ts src/app/api/documents/__tests__/route.preview.test.ts` passed.
+  - `npx tsc --noEmit --incremental false` passed.
+  - `npm run lint` passed.
+  - `npm run test:run` passed (`80/80`).
+  - `npm run build` passed.
+- Current status: code + tests complete for zero-chunk scan hardening; commit/push/deploy in progress.
+- Zero-chunk hardening rollout completed:
+  - commit: `6f035cb` pushed to `feat/rag-engine-switch`.
+  - production deployment: `https://wenkugpt-copy-agizq24wt-nerotinys-projects.vercel.app`.
+  - alias `https://wenkugpt-copy.vercel.app` points to this deployment.
+- Current status: zero-chunk scan hardening is deployed to production; monitor runtime behavior on real scan uploads.
+
+- Added Knowledge Base document organization UX (flat folders):
+  - upload folder field, folder filter, bulk move/clear.
+  - branch commit: `2bd3e1f`.
+- Deployed UI reliability fixes around file manager:
+  - preview close actions restored.
+  - scrollbar usability and scrolling behavior fixed.
+  - light mode contrast corrections in KB dialog/list.
+- OCR Gemini quality tuning shipped:
+  - timeout increased to 60s.
+  - one retry on timeout/parse/empty output.
+  - Czech prompt hardening (diacritics + exact phone extraction guidance).
+  - branch commit: `988d0c9`.
+- Chat empty-state conversational suggestions track shipped in phases:
+  - suggestion cards added and wired to send flow.
+  - liquid-glass hero/style restoration.
+  - random suggestion pool (`4` cards each render).
+  - staged motion polish (staggered entrance + ultra-subtle timing + hover polish).
+- Custom icon system for suggestions shipped:
+  - V1: inline SVG registry and typed icon IDs.
+  - V2 refresh: sport/apparel/lifestyle set expansion and style normalization.
+  - removed old icons (`helmet`, `paddle`) during V2 refresh.
+  - rope icon removed in follow-up (`fix(chat): remove rope icon from suggestion icon set`).
+  - latest commit: `4154e58`.
+- Latest production deployment after V2 + rope removal:
+  - deployment id: `dpl_AdckU3FAhEZmzuJFEbEDoSMQifjU`
+  - URL: `https://wenkugpt-copy-60kj3ouzk-nerotinys-projects.vercel.app`
+  - alias: `https://wenkugpt-copy.vercel.app` (`Ready`).
+- Current status: production includes OCR hardening + folder UX + conversational suggestions + custom icon V2 baseline; pending only visual fine-tuning per user feedback.
+
+- Branding consistency update:
+  - added liquid-glass chat-bubble favicon:
+    - `public/favicon.svg`
+    - `src/app/layout.tsx` (`metadata.icons` wired to `/favicon.svg`).
+  - validation:
+    - `npm run lint` passed.
+    - `npx tsc --noEmit --incremental false` passed.
+  - commits:
+    - `00beb08` (`docs(incident): sync handoff docs after chat icon V2 rollout`)
+    - `a2dfadf` (`feat(ui): add liquid-glass chat bubble favicon`)
+  - production deployment:
+    - deployment id `dpl_9xtSkacA1E3YSw4pju88N54GwDiH`
+    - URL `https://wenkugpt-copy-diwcxv4fg-nerotinys-projects.vercel.app`
+    - alias `https://wenkugpt-copy.vercel.app` updated and ready.
+- Latest local UI copy adjustment (pending commit/deploy):
+  - file: `src/components/chat/EmptyState.tsx`
+  - change: hero heading text `Liquid Glass Chat` -> `WenkuGPT`.
+  - current status: implemented locally, awaiting push/deploy step.
+
+- Bejroska easter-egg production follow-up opened:
+  - user reported 3D hoodie not visible in spotlight overlay on deployed alias.
+  - quick code review indicates two likely contributors:
+    1. CSP blocks remote `model-viewer` loader from `unpkg.com` (`script-src 'self'` in `src/proxy.ts`).
+    2. overlay auto-close uses `durationMs=3000` in `src/components/chat/ChatPanel.tsx`, too short for cold-load of ~23MB GLB.
+  - plan recorded in handoff prompt:
+    - switch to local `@google/model-viewer` import (no CSP relaxation),
+    - increase/condition overlay close timing,
+    - keep fallback rendering and warning-free chat flow,
+    - run full gates and re-deploy.
+- Bejroska GLB asset rollout completed:
+  - committed `public/models/bejroska-hoodie.glb` in commit `95106d5` (`chore(chat): add Bejroska hoodie GLB asset`).
+  - production deployment confirmed:
+    - deployment id `dpl_BoBmwbCDZmDHqaWRW6vmVvXG4TMW`
+    - URL `https://wenkugpt-copy-8cuublfo0-nerotinys-projects.vercel.app`
+    - alias `https://wenkugpt-copy.vercel.app` updated.
+- Runtime verification:
+  - model file path is valid in app build: `/models/bejroska-hoodie.glb`.
+  - direct HEAD check from local PowerShell had an `Invoke-WebRequest` null-reference issue; asset accessibility should be confirmed in browser network tab or with a non-PowerShell HTTP client.
+- Current blocker remains visual readiness:
+  - some runs still close overlay before model is visibly rendered.
+  - next implementation step is local `@google/model-viewer` import + model-ready close timing policy.
+
+- Bejroska spotlight close-policy update (2026-02-11, local):
+  - user requested that showcase does not auto-close and stays open until user click.
+  - implemented `autoClose` switch in `src/components/chat/SpotlightConfetti.tsx`.
+  - wired Bejroska overlay to manual-close mode in `src/components/chat/ChatPanel.tsx` (`autoClose={false}`).
+  - local validation passed: `npm run lint`, `npx tsc --noEmit --incremental false`, `npm run build`.
+
+- Bejroska model-viewer CSP-safe loader update (2026-02-11, local):
+  - added dependency `@google/model-viewer`.
+  - replaced remote `unpkg` script dependency path with client-only dynamic module import in `src/components/chat/BejroskaShowcase.tsx`.
+  - kept fallback UI path active for load/model errors.
+  - re-validated local gates after fix:
+    - `npm run lint` passed.
+    - `npx tsc --noEmit --incremental false` passed.
+    - `npm run build` passed.
+  - next action: commit/push + production deploy + alias runtime verification.
